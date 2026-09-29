@@ -1,0 +1,68 @@
+# Modular HUD assets
+
+Generated with the built-in ImageGen tool. Each independent widget owns its child content; the full-screen HUD PNG is no longer referenced.
+
+| File | Use | Packaged size |
+|---|---|---|
+| panel.png | Airtime panel | 512 × 342 |
+| streak.png | Winged streak banner | 640 × 214 |
+| row.png | Reused leaderboard row and control plate | 512 × 88 |
+| segment.png | Reused 5% meter increment | 32 × 80 |
+| digits.png | Gold serif 0–9, decimal, colon; 6 × 2 cells | 768 × 256 |
+| burst.png | Eight golden vortex animation frames; 4 × 2 cells | 512 × 256 |
+| milestones/milestone-100.png through milestone-1000.png | Ten generated ruby-and-gold winged award frames, accent colors and ornamentation escalate every 100 seconds | 640 × 214 each |
+| dial.png | Separate cyan and gold attempt-status ring | 384 × 384 |
+| vortex.png | Reused gold spiral icon and orb indicators | 256 × 256 |
+
+All live numerals sample individual sprite cells. Letters use the SDK's native serif font. Packaging only downsamples/crops the generated sources and preserves alpha; scripts/package-hud.ps1 records source IDs. No full-screen particles, fake multipliers, or baked meter values.
+
+At 30 seconds of earned airtime, a 0.55-second wind-flash plays in the streak banner. At 60 seconds and each minute after, its golden vortex sprite sheet loops for 2.4 seconds. Every 100 seconds through 1,000 seconds, one of ten generated winged award frames appears with exact SDK text, flashes at screen center, then scales down and travels to the top streak slot. The frame uses the highest tier after 1,000 seconds. Paused time does not advance effects; replay resets the attempt's milestone tier. The ten frames are individually generated from the supplied gold-winged ruby plaque reference and packaged at 640 × 214; run `powershell -ExecutionPolicy Bypass -File scripts/package-milestones.ps1` to repack them. All celebration art is transparent and adds about 2 MB compressed. The airtime card sits top-right, the streak and lift/sound controls top-center, nearby-scene standings and run details mid-right, the compact teleport-orb counter on the right, and a simple altitude gauge bottom-center. Persistent global standings live on a physical world-space board by a concrete pillar. The left side, main playfield and lower corners stay clear. Portrait canvases intentionally render no HUD. One cached UI tree updates at most 20 times per second. Desktop shows five leaders and compact landscape shows three. Visual checks use a browser component fixture; native mobile FPS and final Decentraland client rendering still need a device check.
+
+### Milestone frame source IDs
+
+| Airtime | Generated source ID | Frame accent |
+|---:|---|---|
+| 100 s | `exec-46d6e385-2141-4e1f-976f-fe47d225c015` | Ruby |
+| 200 s | `exec-1baa8688-4ba3-402f-9bc8-f9540d046de0` | Amber |
+| 300 s | `exec-a3d8edbe-3cc6-4082-862b-7aa50203b800` | Sun yellow |
+| 400 s | `exec-4cc8cce3-7330-42a1-a303-705bdb66aafb` | Emerald |
+| 500 s | `exec-3143e678-b69f-4428-bea9-fd778aa09204` | Glacier cyan |
+| 600 s | `exec-14416ec4-37a6-4ccb-91cd-fefe13350132` | Sapphire |
+| 700 s | `exec-4d9d01a8-1abe-469e-b27b-6411d23552a9` | Amethyst |
+| 800 s | `exec-fa44081d-b982-45ba-9810-a66481724a34` | Magenta |
+| 900 s | `exec-7be767be-008d-40a2-906d-cd64685a079f` | Crimson |
+| 1,000 s | `exec-c0fbbcd9-75bd-4cc4-83dd-e872f69b6bbf` | Prismatic white gold |
+
+## Generation prompts
+
+### dial.png
+
+One isolated perfect circular status dial frame, centered composition, ornate bright cyan outer energy ring with warm gold inner bevel, small symmetrical gold tick marks, transparent empty center, no text or numbers, genuinely transparent outside the ring, refined luminous fantasy arcade interface.
+
+### vortex.png
+
+One isolated luminous magical golden vortex spiral symbol, round cyclone made from fluid gold and ivory energy ribbons with three tiny sparks, transparent center, no background, no border or text, genuine transparency, legible at 48 pixels.
+
+### panel
+
+One isolated fantasy arcade HUD panel, wide 3:2 aspect, restrained polished gold rim and cyan luminous bevels around a dark navy glass rectangular interior, small crown centered above rim. Empty interior occupying 75 percent of image, no text no numbers no progress bars. Symmetric straight frontal orthographic, tightly framed with 6 percent padding. Genuine transparent exterior. Emerald Vortex high quality game UI.
+
+### streak
+
+One isolated fantasy arcade winged streak banner, wide 3:1 composition. Rich red glass central plaque, polished gold rim, sweeping gold feather wings both sides. Empty central space for live text. No text, no numerals. Genuine transparent outside silhouette, 5 percent padding. Premium luminous fantasy arcade game UI.
+
+### row
+
+One isolated horizontal fantasy arcade leaderboard row background, 5:1 aspect, dark navy glass interior with thin beveled cyan rim and tiny gold corner points. Straight horizontal rectangle, space for avatar at left and numbers right but no content at all. No text no numbers no icons. Genuine transparent outside with 4 percent padding. Premium game UI.
+
+### segment
+
+One isolated small progress bar segment for fantasy arcade UI. A single beveled slanted cyan glass parallelogram, gold top and bottom rim, luminous cyan white center, narrow vertical shape 1:2 aspect, no other objects no text. Genuine transparent background, centered with 8 percent padding. Readable at 12 pixels wide.
+
+### digits
+
+Production sprite sheet of gold serif digits. Exact uniform 6 column by 2 row grid, 12 equal cells. Row one: 0 1 2 3 4 5. Row two: 6 7 8 9 . :. Exactly one centered glyph per cell, all same baseline, same height and width allocation. No grid lines, no labels. Polished gold beveled bold Roman SERIF typography with warm ivory highlights, compact dark outline. Genuine transparent background. Glyphs stay completely within own cells with 18 percent margin. Flat orthographic texture, game HUD font atlas.
+
+### burst
+
+Production animation sprite sheet: 4 columns by 2 rows equal square cells, eight sequential frames left to right. ONE golden magical spiral vortex ring per cell, centered, consistent scale and center. Ring rotates and expands then fades over eight frames. Thin fluid luminous gold spiral ribbons and a few star sparks, transparent ring center, genuine transparent background everywhere outside glowing ribbons. No text no labels no grid, no dark discs. Premium fantasy arcade streak celebration, clear gutters 10 percent within each cell.

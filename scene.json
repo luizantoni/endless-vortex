@@ -1,0 +1,75 @@
+{
+  "ecs7": true,
+  "runtimeVersion": "7",
+  "display": {
+    "title": "Endless Vortex - 3x3 Airtime",
+    "description": "Glide through the enlarged vortex and jump from orbiting platforms. Longest airborne time wins.",
+    "favicon": "favicon_asset",
+    "navmapThumbnail": "assets/scene/Images/f94b7898-9e48-44fb-919e-5c402f2f5567-1779052325.jpg"
+  },
+  "owner": "",
+  "contact": {
+    "name": "antonio azzolino",
+    "email": "@antonioazzolino"
+  },
+  "main": "bin/index.js",
+  "tags": [],
+  "scene": {
+    "base": "0,0",
+    "parcels": [
+      "0,0",
+      "1,0",
+      "2,0",
+      "0,1",
+      "1,1",
+      "2,1",
+      "0,2",
+      "1,2",
+      "2,2"
+    ]
+  },
+  "spawnPoints": [
+    {
+      "name": "SpawnArea1",
+      "default": true,
+      "position": {
+        "x": [
+          22.34999942779541,
+          26.84999942779541
+        ],
+        "y": [
+          0,
+          0
+        ],
+        "z": [
+          22.679999828338623,
+          27.180001258850098
+        ]
+      },
+      "cameraTarget": {
+        "x": 12,
+        "y": 1.5,
+        "z": 12
+      }
+    }
+  ],
+  "requiredPermissions": [
+    "ALLOW_TO_MOVE_PLAYER_INSIDE_SCENE"
+  ],
+  "featureToggles": {
+    "voiceChat": "enabled",
+    "portableExperiences": "enabled",
+    "nearbyVoiceChat": "enabled"
+  },
+  "creator": "",
+  "skyboxConfig": {},
+  "source": {
+    "origin": "creator-hub",
+    "projectId": "fe776303-41bd-45d7-8bd1-5940d65fae21"
+  },
+  "rating": "T",
+  "worldConfiguration": {
+    "name": "antonioazzolino.dcl.eth"
+  },
+  "landscapeTerrain": true
+}

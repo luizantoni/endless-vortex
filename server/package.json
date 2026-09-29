@@ -1,0 +1,10 @@
+{
+  "name": "endless-vortex-v1-playtest-records",
+  "version": "1.0.0",
+  "private": true,
+  "type": "commonjs",
+  "engines": { "node": ">=24.0.0" },
+  "scripts": {
+    "start": "node index.js"
+  }
+}
