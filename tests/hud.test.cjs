@@ -15,7 +15,7 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   const mod = { exports: {} }
   new Function('require','module','exports',code)(name => imports[name],mod,mod.exports)
   const { display, setupAirtimeUi } = mod.exports
-  setupAirtimeUi({ lift() {}, refresh() {}, sound() {} })
+  setupAirtimeUi()
   display.rows = Array.from({length:5},(_,i)=>({rank:i+1,userId:'avatar'+i,name:'Runner',airtime:'12480.000s'}))
   const walk = node => [node,...node.children.flatMap(walk)]
   for (const [width,height] of [[1280,720],[844,390],[390,844]]) {
@@ -30,6 +30,7 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
     }
     for (const n of walk(tree)) {
       if(n.props.uiText) { assert.equal(n.props.uiText.font,'serif'); assert.ok(n.props.uiText.fontSize>=11) }
+      assert.ok(!/LIFT|SOUND ON|SOUND OFF/.test(n.props.uiText?.value || ''),'manual lift and sound controls are removed')
       if(n.props.onMouseDown && /LIFT|SOUND/.test(n.props.uiText?.value)) assert.ok(n.props.uiTransform.height>=44)
       const src=n.props.uiBackground?.texture?.src
       if(src) { assert.ok(fs.existsSync(src)); assert.ok(!src.endsWith('eternal-vortex-hud.png')) }

@@ -51,12 +51,18 @@ test('3x3 scene and Creator Hub geometry/spawn metadata agree', () => {
   const scene = JSON.parse(fs.readFileSync('scene.json', 'utf8'))
   const composite = JSON.parse(fs.readFileSync('assets/scene/main.composite', 'utf8'))
   const meta = composite.components.find(c => c.name === 'inspector::SceneMetadata-v5').data['0'].json
-  const model = composite.components.find(c => c.name === 'core::Transform').data['515'].json
+  const environment = composite.components.find(c => c.name === 'core::GltfContainer')
+  const environmentId = Object.keys(environment.data).find(id =>
+    environment.data[id].json.src === 'assets/models/endless-vortex-plants.glb')
+  assert.ok(environmentId, 'the plants environment is present in the Creator Hub scene')
+  const model = composite.components.find(c => c.name === 'core::Transform').data[environmentId].json
   const expected = Array.from({ length: 9 }, (_, i) => `${i % 3},${Math.floor(i / 3)}`).sort()
   assert.deepEqual([...scene.scene.parcels].sort(), expected)
   assert.deepEqual(meta.layout.parcels.map(p => `${p.x},${p.y}`).sort(), expected)
-  assert.deepEqual(model.position, ARENA.modelPosition)
-  assert.deepEqual(model.scale, { x: 1.5, y: 1.5, z: 1.5 })
+  assert.deepEqual(model.position, { x: 23.75, y: 0, z: 24.25 })
+  for (const axis of ['x', 'y', 'z']) assert.ok(Math.abs(model.scale[axis] - 1.4) < 1e-6)
+  assert.equal(environment.data[environmentId].json.visibleMeshesCollisionMask, 3)
+  assert.equal(environment.data[environmentId].json.invisibleMeshesCollisionMask, 0)
   assert.equal(meta.disablePortableExperiences, false)
   for (const axis of ['x', 'y', 'z']) assert.deepEqual(meta.spawnPoints[0].position[axis].value, scene.spawnPoints[0].position[axis])
   assert.deepEqual(scene.spawnPoints[0].position.y, [0, 0])
@@ -75,7 +81,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   let math
   try { math = require('@dcl/ecs-math') } finally { require.extensions['.js'] = oldJs }
   const load = Module._load
-  const display = { fx: 50 }, actions = {}
+  const display = {}
   let groundCallback
   const sdkEcs = { ...ecs, raycastSystem: { ...ecs.raycastSystem,
     registerGlobalDirectionRaycast: (options, callback) => {
@@ -90,7 +96,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
       onEnterScene: () => {}, onLeaveScene: () => {} }
     if (request === '~system/Runtime' || request === '~system/EnvironmentApi') return {} // Missing APIs cannot stop startup.
     if (request === '~system/RestrictedActions') return { movePlayerTo: async () => ({}) }
-    if (request === './airtime-ui') return { display, setupAirtimeUi: value => Object.assign(actions, value) }
+    if (request === './airtime-ui') return { display, setupAirtimeUi: () => {} }
     if (request === './world') throw new Error('Do not recreate the rejected box or launch deck')
     if (request === './vortex-visuals') throw new Error('Wind planes must not be loaded')
     return load.call(this, request, parent, isMain)
@@ -123,8 +129,18 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   assert.equal(leafEntities().length, 18)
   assert.equal(GltfContainer.get(authoredEnvironment).visibleMeshesCollisionMask, 3)
   assert.equal(GltfContainer.get(authoredEnvironment).invisibleMeshesCollisionMask, 0)
+  assert.equal(GltfContainer.get(authoredEnvironment).src, 'assets/models/endless-vortex-plants.glb')
   assert.deepEqual(Transform.get(authoredEnvironment).position, { x: 23.75, y: 0, z: 24.25 })
   assert.deepEqual(Transform.get(authoredEnvironment).scale, { x: 1.4, y: 1.4, z: 1.4 })
+  const windEnvironment = [...engine.getEntitiesWith(GltfContainer)]
+    .find(([, model]) => model.src === 'assets/models/endless-vortex-wind.glb')?.[0]
+  assert.ok(windEnvironment)
+  assert.equal(GltfContainer.get(windEnvironment).visibleMeshesCollisionMask, 0)
+  assert.equal(GltfContainer.get(windEnvironment).invisibleMeshesCollisionMask, 0)
+  assert.deepEqual(Transform.get(windEnvironment).position, Transform.get(authoredEnvironment).position)
+  assert.deepEqual(Transform.get(windEnvironment).scale, Transform.get(authoredEnvironment).scale)
+  assert.deepEqual(ecs.Animator.get(windEnvironment).states,
+    [{ clip: 'Animation', playing: true, loop: true }])
   assert.equal([...engine.getEntitiesWith(ecs.MeshCollider)].length, 0)
   const visuals = [...engine.getEntitiesWith(ecs.MeshRenderer, Transform)]
   assert.equal(visuals.length, 45) // Orb bodies, billboard sprites, pooled sparks and world leaderboard trim.
@@ -154,9 +170,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   Transform.getMutable(player).position = at({ x: 16, y: 2, z: 16 })
   for (let i = 0; i < 10; i++) await engine.update(0.05)
   assert.deepEqual(PhysicsCombinedForce.get(player).vector, { x: 0, y: 44 * AIRFLOW.mobileLift, z: 0 }) // no stacking
-  actions.lift(); await engine.update(0.05)
-  assert.deepEqual(PhysicsCombinedForce.get(player).vector, { x: 0, y: 44 * AIRFLOW.desktopLift, z: 0 })
-  actions.lift(); await engine.update(0.05)
+  await engine.update(0.05)
   assert.deepEqual(PhysicsCombinedForce.get(player).vector, { x: 0, y: 44 * AIRFLOW.mobileLift, z: 0 })
   Transform.getMutable(player).position = { x: 25, y: 3, z: 25 }
   await engine.update(0.05)
@@ -246,7 +260,6 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
 
   await t.test('real entry point animates every frame and emits lift with a paused timer/unlocked pointer', async () => {
     const { BUBBLES } = require('../src/bubble-rules.ts')
-    actions.lift() // desktop
     ecs.PointerLock.createOrReplace(engine.CameraEntity, { isPointerLocked: false })
     const body = [...engine.getEntitiesWith(ecs.MeshRenderer, Transform)]
       .filter(([id, mesh, tr]) => mesh.mesh.$case === 'sphere' && tr.parent === engine.RootEntity &&
@@ -277,13 +290,12 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     await frame() // Sweeps through the bubble, ending outside its radius.
     const impulse = ecs.PhysicsCombinedImpulse.get(player)
     assert.ok(impulse.eventId > beforeEvent)
-    assert.deepEqual(impulse.vector, { x: 0, y: BUBBLES.desktopImpulse, z: 0 })
+    assert.deepEqual(impulse.vector, { x: 0, y: BUBBLES.mobileImpulse, z: 0 })
     assert.equal(display.time, score) // Physical recovery never adds time directly.
     await frame()
     assert.ok(Transform.get(body).scale.x < BUBBLES.radius * 2)
     assert.equal(ecs.PhysicsCombinedImpulse.get(player).eventId, impulse.eventId)
     ecs.PointerLock.deleteFrom(engine.CameraEntity)
-    actions.lift()
     await engine.update(2)
   })
 

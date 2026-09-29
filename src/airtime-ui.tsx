@@ -4,8 +4,8 @@ import { Color4 } from '@dcl/sdk/math'
 
 export type LeaderRow = { rank: number; userId: string; name: string; airtime: string; phase: string; approximate?: boolean }
 export const display = {
-  time: '0.000', best: '0.000', state: 'Jump into the wind', lift: 'Mobile',
-  rows: [] as LeaderRow[], storage: 'Session records only', fx: 50,
+  time: '0.000', best: '0.000', state: 'Jump into the wind',
+  rows: [] as LeaderRow[], storage: 'Session records only',
   orbs: 0, energy: 0, altitude: '0.0', localUser: '', medals: 'No medals yet'
 }
 const ROOT = 'assets/ui/modular/'
@@ -58,7 +58,7 @@ function simpleGauge(value: number, width: number, height: number) {
   </UiEntity>
 }
 
-export function setupAirtimeUi(actions: { lift: () => void; refresh: () => void; sound: () => void }) {
+export function setupAirtimeUi() {
   let clock = 0, nextTick = 0, tick = 0, milestone = 0, hundredMilestone = 0
   let achievementTier = 0, achievementStart = -10
   let shotUntil = 0, shotStart = 0, vortexUntil = 0, vortexStart = 0
@@ -134,8 +134,6 @@ export function setupAirtimeUi(actions: { lift: () => void; refresh: () => void;
     const mw = w * .28, mh = Math.max(30, 40 * s)
     const mx = l + (w - mw) / 2, my = t + h - mh - 8 * s - (inset?.bottom || 0)
     const orbCount = display.orbs ? (display.orbs % 10 || 10) : 0
-    const actionW = sw, actionH = Math.max(44, 40 * s), actionY = t + h * .22
-
     cached = <UiEntity uiTransform={{ width: '100%', height: '100%', pointerFilter: 'none' }}>
       <UiEntity uiTransform={box(px, py, pw, ph)}>
         {art('panel', box(0, 0, pw, ph))}
@@ -263,19 +261,6 @@ export function setupAirtimeUi(actions: { lift: () => void; refresh: () => void;
         </UiEntity>
       </UiEntity>
 
-      <UiEntity uiTransform={box(sx, actionY, actionW, actionH)}>
-        <UiEntity uiTransform={box(0, 0, actionW * .49, actionH)}>
-          {art('row', box(0, 0, actionW * .49, actionH))}
-          <UiEntity uiTransform={box(0, 0, actionW * .49, actionH)} uiText={label('LIFT · ' + display.lift, 12 * s)}
-            onMouseDown={actions.lift} />
-        </UiEntity>
-        <UiEntity uiTransform={box(actionW * .51, 0, actionW * .49, actionH)}>
-          {art('row', box(0, 0, actionW * .49, actionH))}
-          <UiEntity uiTransform={box(0, 0, actionW * .49, actionH)}
-            uiText={label(display.fx ? 'SOUND ON' : 'SOUND OFF', 12 * s)}
-            onMouseDown={actions.sound} />
-        </UiEntity>
-      </UiEntity>
     </UiEntity>
     return cached
   })

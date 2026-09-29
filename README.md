@@ -4,10 +4,10 @@ Stay airborne in the enlarged wind tunnel. The build occupies **3x3 parcels (48x
 
 ## Active behavior
 
-- The `endless_vortex6.glb` environment is authored in the scene at (23.75, 0, 24.25), scale 1.4. Its visible meshes provide physics and pointer collision; invisible helper meshes are non-colliding. Runtime uses this environment in place of the old wind-tunnel model. Airtime boundaries remain radius 21.6 m and height 30 m.
+- `endless-vortex-plants.glb` supplies the environment at the authored (23.75, 0, 24.25) position and 1.4 uniform scale. Its visible meshes provide physics and pointer collision; invisible meshes do not collide. `endless-vortex-wind.glb` overlays the wind ribbons, runs its embedded `Animation` loop, and has no collision masks. Both models use the same authored transform. The generated wind model replaces the old procedural wind-plane effect. Airtime boundaries remain radius 21.6 m and height 30 m.
 - `AIRFLOW.centralOnly = true` temporarily enables only the central vertical wind volume: **32 force on desktop / 14 on mobile**. It is centered at x/z 24, spans 5.4 m across each horizontal axis and reaches y 24.375 m. Outside this volume, no continuous wind force is applied. Bubble contact can still give a small lift.
 - Active vortex rotation uses spin 11. Saved inward pull 1.05, outer containment 2.94 and vortex lift 2.25 remain available. Set `centralOnly` to `false` in `src/vortex.ts` and rebuild to restore these and the broad updraft. Desktop/mobile multipliers remain 0.8/0.35; restoring broad lift would add 8/3.5 respectively. Pausing player wind does not pause platform orbiting.
-- The 48 decorative wind planes (ribbons and segmented rings), their entities and animation system remain absent; `src/vortex-visuals.ts` is dormant.
+- The old 48-entity wind-plane effect in `src/vortex-visuals.ts` remains dormant; the animated wind ribbon layer comes from the GLB and is visual-only.
 - Normal client movement, jumping and gliding. No locomotion overrides or disabled glider.
 - Original ground-level spawn. Airflow works immediately, without an attempt/start condition.
 

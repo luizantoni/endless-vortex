@@ -1,4 +1,4 @@
-import { AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, GltfContainer, InputModifier, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, Transform } from '@dcl/sdk/ecs'
+import { Animator, AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, GltfContainer, InputModifier, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import * as RestrictedActions from '~system/RestrictedActions'
 import { getPlayer } from '@dcl/sdk/players'
@@ -22,15 +22,18 @@ export function main() {
   InputModifier.deleteFrom(engine.PlayerEntity)
   AvatarLocomotionSettings.deleteFrom(engine.PlayerEntity)
 
-  const source = 'assets/models/endless_vortex6/endless_vortex6.glb'
-  const existing = [...engine.getEntitiesWith(GltfContainer)].find(([, model]) => model.src === source)
-  const environment = existing?.[0] ?? engine.addEntity()
+  const source = 'assets/models/endless-vortex-plants.glb'
+  const windSource = 'assets/models/endless-vortex-wind.glb'
+  const models = [...engine.getEntitiesWith(GltfContainer)]
+  const environment = models.find(([, model]) => model.src === source)?.[0] ??
+    models.find(([, model]) => model.src === 'assets/models/endless_vortex6/endless_vortex6.glb')?.[0] ?? engine.addEntity()
   // Keep the authored scene transform when the environment is already in the composite.
-  // The visible meshes themselves provide collision; hidden helper meshes do not.
-  if (!Transform.has(environment)) Transform.create(environment, { position: ARENA.modelPosition,
-    scale: Vector3.create(ARENA.scale, ARENA.scale, ARENA.scale) })
-  for (const [entity, model] of engine.getEntitiesWith(GltfContainer)) {
-    if (entity !== environment && model.src === 'assets/scene/Models/wind_tunnel2/wind_tunnel2.glb') {
+  // Plants provide visible-mesh collision; wind stays a separate visual-only layer.
+  if (!Transform.has(environment)) Transform.create(environment, { position: { x: 23.75, y: 0, z: 24.25 },
+    scale: Vector3.create(1.4, 1.4, 1.4) })
+  for (const [entity, model] of models) {
+    if (entity !== environment && (model.src === 'assets/models/endless_vortex6/endless_vortex6.glb' ||
+        model.src === 'assets/scene/Models/wind_tunnel2/wind_tunnel2.glb')) {
       GltfContainer.deleteFrom(entity)
     }
   }
@@ -39,6 +42,14 @@ export function main() {
     visibleMeshesCollisionMask: ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS,
     invisibleMeshesCollisionMask: ColliderLayer.CL_NONE
   })
+  Animator.createOrReplace(environment, { states: [{ clip: 'Animation', playing: false, loop: false }] })
+  const wind = models.find(([, model]) => model.src === windSource)?.[0] ?? engine.addEntity()
+  const plantsTransform = Transform.get(environment)
+  Transform.createOrReplace(wind, { position: { ...plantsTransform.position },
+    rotation: { ...plantsTransform.rotation }, scale: { ...plantsTransform.scale } })
+  GltfContainer.createOrReplace(wind, { src: windSource,
+    visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+  Animator.createOrReplace(wind, { states: [{ clip: 'Animation', playing: true, loop: true }] })
 
   const music = engine.addEntity()
   Transform.create(music, { parent: engine.PlayerEntity })
@@ -82,14 +93,11 @@ export function main() {
   }
   let run = new Airtime()
   const progress = new Progress('')
-  let platform = 'mobile', manualLift = false
+  let platform = 'mobile'
   let liftScale: number = AIRFLOW.mobileLift // Gentle fallback until the client identifies itself.
   const setPlatform = (value: string) => {
-    if (!manualLift) {
-      platform = value
-      liftScale = liftFor(value)
-      display.lift = liftScale === AIRFLOW.mobileLift ? 'Mobile' : 'Desktop'
-    }
+    platform = value
+    liftScale = liftFor(value)
   }
   // Older preview clients omit this API. Detection never gates scene startup.
   void (async () => {
@@ -104,24 +112,9 @@ export function main() {
         const info = await Environment.getPlatform({})
         if (info.platform) setPlatform(info.platform)
       }
-    } catch { /* The visible lift toggle remains available on unsupported clients. */ }
+    } catch { /* Keep the gentle fallback on unsupported clients. */ }
   })()
-  setupAirtimeUi({
-    lift: () => {
-      playMusic()
-      manualLift = true
-      liftScale = liftScale === AIRFLOW.mobileLift ? AIRFLOW.desktopLift : AIRFLOW.mobileLift
-      display.lift = liftScale === AIRFLOW.mobileLift ? 'Mobile' : 'Desktop'
-      platform = display.lift.toLowerCase()
-    },
-    refresh: () => { playMusic(); void progress.sync() },
-    sound: () => {
-      display.fx = (display.fx + 25) % 75
-      bubbles.setVolume(display.fx / 100)
-      AudioSource.getMutable(music).volume = display.fx / 250
-      if (display.fx > 0) playMusic()
-    }
-  })
+  setupAirtimeUi()
 
   const footOffset = 0.88, floorTop = ARENA.floorTop
   const probe = engine.addEntity()

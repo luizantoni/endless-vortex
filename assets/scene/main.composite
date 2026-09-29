@@ -117,7 +117,7 @@
       "data": {
         "512": {
           "json": {
-            "src": "assets/models/endless_vortex6/endless_vortex6.glb",
+            "src": "assets/models/endless-vortex-plants.glb",
             "visibleMeshesCollisionMask": 3,
             "invisibleMeshesCollisionMask": 0
           }
@@ -139,7 +139,7 @@
       "data": {
         "512": {
           "json": {
-            "value": "endless_vortex6.glb"
+            "value": "endless-vortex-plants.glb"
           }
         }
       }
