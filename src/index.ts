@@ -26,7 +26,7 @@ export function main() {
   const windSource = 'assets/models/endless-vortex-wind.glb'
   const models = [...engine.getEntitiesWith(GltfContainer)]
   const environment = models.find(([, model]) => model.src === source)?.[0] ??
-    models.find(([, model]) => model.src === 'assets/models/endless_vortex6/endless_vortex6.glb')?.[0] ?? engine.addEntity()
+    engine.addEntity()
   // Keep the authored scene transform when the environment is already in the composite.
   // Plants provide visible-mesh collision; wind stays a separate visual-only layer.
   if (!Transform.has(environment)) Transform.create(environment, { position: { x: 23.75, y: 0, z: 24.25 },

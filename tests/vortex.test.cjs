@@ -114,7 +114,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   const authoredEnvironment = engine.addEntity()
   Transform.create(authoredEnvironment, { position: { x: 23.75, y: 0, z: 24.25 },
     scale: { x: 1.4, y: 1.4, z: 1.4 } })
-  GltfContainer.create(authoredEnvironment, { src: 'assets/models/endless_vortex6/endless_vortex6.glb',
+  GltfContainer.create(authoredEnvironment, { src: 'assets/models/endless-vortex-plants.glb',
     visibleMeshesCollisionMask: 0, invisibleMeshesCollisionMask: 3 })
   game.main()
   assert.equal(ecs.InputModifier.has(player), false)
