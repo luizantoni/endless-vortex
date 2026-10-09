@@ -16,19 +16,37 @@ export class Airtime {
     const running = this.phase === 'airborne' || this.phase === 'paused'
     if (!s.connected || s.teleported || !Number.isFinite(s.dt) || !Number.isFinite(s.wallDt) ||
         s.dt <= 0 || s.wallDt < 0 || s.dt > 0.5 || s.wallDt > 0.5) {
-      this.armed = false
-      if (running) { this.phase = 'finished'; this.reason = 'Interrupted · land to retry'; return true }
+      // A client may not expose the player transform immediately, and mobile clients can
+      // deliver a long first frame while loading. Those gaps happen before an attempt and
+      // must not disarm it; only interrupt an attempt that has actually started.
+      if (running) {
+        this.armed = false
+        this.phase = 'finished'
+        this.reason = 'Interrupted · touch floor pad to reset'
+        return true
+      }
+      return false
+    }
+    if (s.floor) {
+      if (running) {
+        this.phase = 'finished'
+        this.seconds = 0
+        this.armed = true
+        this.reason = 'Finished · floor pad · move to restart'
+        return true
+      }
+      if (this.phase === 'finished' && !this.armed) {
+        this.seconds = 0
+        this.day = ''
+        this.armed = true
+        this.reason = 'Finished · floor pad · move to restart'
+      }
       return false
     }
     // Leaving the playable volume pauses the existing run. The first sample back inside
     // only resumes it; its interval is discarded below, so time outside is never credited.
     if (!s.inside) {
       if (running) { this.phase = 'paused'; this.reason = 'Paused · return to arena' }
-      return false
-    }
-    if (s.floor) {
-      this.armed = true
-      if (running) { this.phase = 'finished'; this.reason = 'Finished · jump to retry'; return true }
       return false
     }
     if (s.focused === false) {
@@ -55,5 +73,17 @@ export class Airtime {
     this.reason = 'Airborne'
     return false
   }
+
   get milliseconds(): number { return Math.floor(this.seconds * 1000 + 1e-6) }
+}
+
+/** Keeps a brief floor touch from slipping between the 20 Hz airtime samples. */
+export class FloorContactLatch {
+  private pending = false
+  record(touching: boolean) { if (touching) this.pending = true }
+  consume(): boolean {
+    const touching = this.pending
+    this.pending = false
+    return touching
+  }
 }

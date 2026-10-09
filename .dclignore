@@ -7,6 +7,9 @@ export
 tsconfig.json
 tslint.json
 node_modules
+scripts
+assets/models/rocks2.glb
+assets/models/blue-lava-vortex.glb
 server
 tests
 docs

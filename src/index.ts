@@ -1,11 +1,11 @@
-import { Animator, AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, GltfContainer, InputModifier, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, Transform } from '@dcl/sdk/ecs'
+import { Animator, AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, Entity, GltfContainer, InputModifier, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import * as RestrictedActions from '~system/RestrictedActions'
 import { getPlayer } from '@dcl/sdk/players'
 import * as Runtime from '~system/Runtime'
 import * as Environment from '~system/EnvironmentApi'
 import { AIRFLOW, inWindArea, liftFor, rotationForce } from './vortex'
-import { Airtime } from './airtime'
+import { Airtime, FloorContactLatch } from './airtime'
 import { createLandingPlatforms, LANDINGS } from './landing-platforms'
 import { display, setupAirtimeUi } from './airtime-ui'
 import { Progress } from './progress'
@@ -14,7 +14,15 @@ import { ARENA, insideArena } from './arena'
 import { createRecoveryBubbles } from './bubbles'
 import { ORB_REWARD } from './orb-reward'
 import { SceneLeaderboard } from './scene-leaderboard'
-import { createGlobalLeaderboardBoard } from './global-leaderboard-board'
+import { createRockField } from './rock-field'
+import { createBlueLavaVortex } from './blue-lava-vortex'
+import { createFloorResetPlatform, crossedLocalPlayerResetPlane } from './floor-reset-platform'
+import { createAvatarAirtimeBadge } from './avatar-airtime-badge'
+
+const ORCHARD_SCALE = ARENA.size / 44 * 1.2
+const WIND_LAYER_SPACING = 3
+const WIND_POSITION_VARIANCE = 0.2
+const WIND_ANIMATION_VARIANCE = 0.2
 
 // Extend the restored movement baseline; keep native steering, jump and gliding.
 export function main() {
@@ -22,19 +30,28 @@ export function main() {
   InputModifier.deleteFrom(engine.PlayerEntity)
   AvatarLocomotionSettings.deleteFrom(engine.PlayerEntity)
 
-  const source = 'assets/models/endless-vortex-plants.glb'
+  const source = 'assets/models/orchard.glb'
+  const previousSource = 'assets/models/endless-vortex-plants.glb'
   const windSource = 'assets/models/endless-vortex-wind.glb'
   const models = [...engine.getEntitiesWith(GltfContainer)]
   const environment = models.find(([, model]) => model.src === source)?.[0] ??
+    models.find(([, model]) => model.src === previousSource)?.[0] ??
     engine.addEntity()
-  // Keep the authored scene transform when the environment is already in the composite.
-  // Plants provide visible-mesh collision; wind stays a separate visual-only layer.
+  // Preserve the orchard's aspect ratio while enlarging the authored scene by 20%.
   if (!Transform.has(environment)) Transform.create(environment, { position: { x: 23.75, y: 0, z: 24.25 },
-    scale: Vector3.create(1.4, 1.4, 1.4) })
+    scale: Vector3.create(ORCHARD_SCALE, ORCHARD_SCALE, ORCHARD_SCALE) })
+  else {
+    const authoredTransform = Transform.getMutable(environment)
+    authoredTransform.position.y = 0
+    authoredTransform.scale = Vector3.create(ORCHARD_SCALE, ORCHARD_SCALE, ORCHARD_SCALE)
+  }
   for (const [entity, model] of models) {
-    if (entity !== environment && (model.src === 'assets/models/endless_vortex6/endless_vortex6.glb' ||
+    if (entity !== environment && (model.src === previousSource || model.src === 'assets/models/rocks.glb' ||
+        model.src === 'assets/models/rocks2.glb' ||
+        model.src === 'assets/models/endless_vortex6/endless_vortex6.glb' ||
         model.src === 'assets/scene/Models/wind_tunnel2/wind_tunnel2.glb')) {
       GltfContainer.deleteFrom(entity)
+      Animator.deleteFrom(entity)
     }
   }
   GltfContainer.createOrReplace(environment, {
@@ -42,14 +59,24 @@ export function main() {
     visibleMeshesCollisionMask: ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS,
     invisibleMeshesCollisionMask: ColliderLayer.CL_NONE
   })
-  Animator.createOrReplace(environment, { states: [{ clip: 'Animation', playing: false, loop: false }] })
-  const wind = models.find(([, model]) => model.src === windSource)?.[0] ?? engine.addEntity()
+  Animator.deleteFrom(environment)
+  const existingWind = models.filter(([, model]) => model.src === windSource).map(([entity]) => entity)
   const plantsTransform = Transform.get(environment)
-  Transform.createOrReplace(wind, { position: { ...plantsTransform.position },
-    rotation: { ...plantsTransform.rotation }, scale: { ...plantsTransform.scale } })
-  GltfContainer.createOrReplace(wind, { src: windSource,
-    visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
-  Animator.createOrReplace(wind, { states: [{ clip: 'Animation', playing: true, loop: true }] })
+  for (let layer = 0; layer < 3; layer++) {
+    const wind = existingWind[layer] ?? engine.addEntity()
+    const offset = () => (Math.random() * 2 - 1) * WIND_POSITION_VARIANCE
+    const animationSpeed = 1 + (Math.random() * 2 - 1) * WIND_ANIMATION_VARIANCE
+    Transform.createOrReplace(wind, { position: {
+      x: plantsTransform.position.x + offset() * ARENA.scale,
+      y: plantsTransform.position.y + layer * WIND_LAYER_SPACING + offset() * WIND_LAYER_SPACING,
+      z: plantsTransform.position.z + offset() * ARENA.scale
+    },
+      rotation: { ...plantsTransform.rotation }, scale: { ...plantsTransform.scale } })
+    GltfContainer.createOrReplace(wind, { src: windSource,
+      visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
+    Animator.createOrReplace(wind, { states: [{ clip: 'Animation', playing: true, loop: true, speed: animationSpeed }] })
+  }
+  createBlueLavaVortex()
 
   const music = engine.addEntity()
   Transform.create(music, { parent: engine.PlayerEntity })
@@ -69,9 +96,10 @@ export function main() {
   const swirlSource = engine.addEntity()
   const zones = AIRFLOW.zones.map(zone => ({ zone, source: engine.addEntity(), strength: 0 }))
   const platforms = createLandingPlatforms()
+  const rocks = createRockField()
   const bubbles = createRecoveryBubbles(platforms.overlaps)
+  const airtimeBadge = createAvatarAirtimeBadge()
   const sceneLeaderboard = new SceneLeaderboard()
-  const globalLeaderboard = createGlobalLeaderboardBoard()
   let nextOrbReward = ORB_REWARD.every
   let rewardReturnUntil = 0, expectedRewardTeleportUntil = 0
   let expectedRewardPosition: { x: number; y: number; z: number } | undefined
@@ -81,7 +109,11 @@ export function main() {
     expectedRewardTeleportUntil = Date.now() + 4000
     rewardReturnUntil = Date.now() + ORB_REWARD.returnGraceSeconds * 1000
     void RestrictedActions.movePlayerTo({ newRelativePosition: destination }).then(result => {
-      if (result.success) return
+      if (result.success) {
+        bubbles.explodeAccumulation()
+        display.rewardCelebration++
+        return
+      }
       expectedRewardPosition = undefined
       expectedRewardTeleportUntil = rewardReturnUntil = 0
       console.error('The ten-orb teleport could not be completed.')
@@ -116,9 +148,10 @@ export function main() {
   })()
   setupAirtimeUi()
 
-  const footOffset = 0.88, floorTop = ARENA.floorTop
+  const footOffset = 0.88, floorTop = ARENA.floorTop, groundSupportTolerance = 0.4
+  const floorResetPlatform = createFloorResetPlatform()
   const probe = engine.addEntity()
-  Transform.create(probe, { parent: engine.PlayerEntity, position: Vector3.create(0, 1, 0) })
+  Transform.create(probe, { parent: engine.PlayerEntity, position: Vector3.create(0, footOffset + 0.12, 0) })
   let support: { x: number; y: number; z: number; at: number; entityId?: number } | undefined
   let velocityY = 0
   raycastSystem.registerGlobalDirectionRaycast({ entity: probe, opts: {
@@ -128,33 +161,67 @@ export function main() {
     const hit = result.hits.filter(hit => hit.position && (hit.normalHit?.y ?? 0) > 0.5)
       .sort((a, b) => a.length - b.length)[0]
     support = hit?.position ? { ...hit.position, at: Date.now(), entityId: hit.entityId } : undefined
-    if (hit?.position) platforms.confirmRayLanding(hit.entityId,
-      Transform.getOrNull(engine.PlayerEntity)?.position, hit.position, footOffset, velocityY, hit.length)
   })
+  let footLeafContact: { entityId: Entity; at: number } | undefined
+  const contactReach = LANDINGS.contactEpsilon
+  const footRays = [
+    { offset: Vector3.create(0, -footOffset + contactReach / 2, 0), direction: Vector3.Down() },
+    { offset: Vector3.create(0, -footOffset - contactReach / 2, 0), direction: Vector3.Up() },
+    { offset: Vector3.create(-contactReach / 2, -footOffset, 0), direction: Vector3.Right() },
+    { offset: Vector3.create(contactReach / 2, -footOffset, 0), direction: Vector3.Left() },
+    { offset: Vector3.create(0, -footOffset, -contactReach / 2), direction: Vector3.Forward() },
+    { offset: Vector3.create(0, -footOffset, contactReach / 2), direction: Vector3.Backward() }
+  ]
+  for (const ray of footRays) {
+    const footProbe = engine.addEntity()
+    Transform.create(footProbe, { parent: engine.PlayerEntity, position: ray.offset })
+    raycastSystem.registerGlobalDirectionRaycast({ entity: footProbe, opts: {
+      direction: ray.direction, maxDistance: contactReach, collisionMask: ColliderLayer.CL_PHYSICS,
+      queryType: RaycastQueryType.RQT_QUERY_ALL, continuous: true
+    } }, result => {
+      const position = Transform.getOrNull(engine.PlayerEntity)?.position
+      if (!position) return
+      for (const hit of result.hits) {
+        if (hit.position && platforms.confirmRayLanding(hit.entityId, position, hit.position, footOffset)) {
+          footLeafContact = { entityId: hit.entityId as Entity, at: Date.now() }
+          return
+        }
+      }
+    })
+  }
   let sampleAccumulator = 0, recordsAccumulator = 1, refreshAccumulator = 30, windRefreshAccumulator = 0
   let lastWall = Date.now(), lastPosition: Vector3 | undefined
   let lastFramePosition: Vector3 | undefined
   let onPlatform = false, localUser = '', wasConnected = false
+  const floorContact = new FloorContactLatch()
 
   engine.addSystem(dt => {
     const position = Transform.getOrNull(engine.PlayerEntity)?.position
     const now = Date.now()
+    const sharedPlayers = sceneLeaderboard.positions()
+    if (position && !sharedPlayers.some(other => Vector3.distance(position, other) < 0.01)) {
+      sharedPlayers.push({ ...position })
+    }
     // Move collision and support geometry together every frame, before grounding checks.
-    platforms.update(dt, position)
+    platforms.update(dt, position, sharedPlayers)
+    rocks.update(dt, position)
     const landingVelocityY = position && lastFramePosition && dt > 0 ? (position.y - lastFramePosition.y) / dt : 0
     const rayContact = !!position && !!support && now - support.at < 200 && landingVelocityY <= 0.5 &&
       Math.hypot(position.x - support.x, position.z - support.z) < 0.45 &&
-      Math.abs(position.y - footOffset - support.y) <= LANDINGS.nativeSupportTolerance
+      Math.abs(position.y - footOffset - support.y) <= groundSupportTolerance
+    if (rayContact) rocks.stepOn(support!.entityId as Entity | undefined)
     // Contact runs every frame: a brief edge landing must start the collapse countdown too.
-    const landed = !!position && platforms.checkLanding(position, footOffset, landingVelocityY,
-      rayContact ? support!.entityId : undefined)
+    const landed = !!position && !!footLeafContact && now - footLeafContact.at < 100 &&
+      platforms.checkLanding(footLeafContact.entityId)
+    if (footLeafContact && now - footLeafContact.at >= 100) footLeafContact = undefined
     const supportedByRay = rayContact && (!platforms.isPlatform(support!.entityId) || landed)
     const supported = landed || supportedByRay
-    const floor = !!position && (position.y <= floorTop + footOffset + 0.12 ||
-      (supportedByRay && support!.y <= floorTop + 0.15))
+    const groundAltitude = position ? position.y - footOffset - floorTop : Infinity
+    floorContact.record(floorResetPlatform.consumeContact() ||
+      (!!position && !!lastFramePosition && crossedLocalPlayerResetPlane(lastFramePosition, position, footOffset)))
     // Only a real landing leaf pauses its updraft. The tunnel's curved collision mesh can
     // also appear in the ground ray and must not switch the central wind off.
-    onPlatform = landed && !floor
+    onPlatform = landed
     lastFramePosition = position ? { ...position } : undefined
     sampleAccumulator += dt
     if (sampleAccumulator >= 0.05) {
@@ -177,10 +244,11 @@ export function main() {
         now <= rewardReturnUntil ? ORB_REWARD.returnHeight : undefined))
       const pointer = PointerLock.getOrNull(engine.CameraEntity)
       const focused = /mobile|android|ios|iphone|ipad/i.test(platform) || !pointer || pointer.isPointerLocked
-      if (run.update({ dt: sampleDt, wallDt, now, inside, connected, floor, supported,
+      const completedMilliseconds = run.milliseconds, completedDay = run.day
+      if (run.update({ dt: sampleDt, wallDt, now, inside, connected, floor: floorContact.consume(), supported,
         moved: !rewardTeleportTransition && distance > 0.001,
         teleported: !rewardTeleportTransition && distance > 4, focused })) {
-        progress.record(run.milliseconds, run.day, now)
+        progress.record(completedMilliseconds, completedDay, now)
       }
       lastPosition = position ? { ...position } : undefined
       display.time = (run.milliseconds / 1000).toFixed(3)
@@ -191,7 +259,7 @@ export function main() {
     // A finished/paused attempt must not disable the basic bubble recovery mechanic.
     const connectedForBubbles = !(wasConnected && RealmInfo.getOrNull(engine.RootEntity)?.isConnectedSceneRoom === false)
     const bubbleImpulse = bubbles.update(dt, position, velocityY, liftScale === AIRFLOW.mobileLift,
-      !!position && connectedForBubbles && insideArena(position))
+      !!position && connectedForBubbles && insideArena(position), sharedPlayers)
     const popped = bubbles.getPoppedTotal()
     if (popped >= nextOrbReward) {
       nextOrbReward = (Math.floor(popped / ORB_REWARD.every) + 1) * ORB_REWARD.every
@@ -199,9 +267,12 @@ export function main() {
     } else if (bubbleImpulse > 0) {
       Physics.applyImpulseToPlayer(Vector3.create(0, bubbleImpulse, 0))
     }
-    display.orbs = popped
-    display.energy = position ? Math.round(Math.max(0, Math.min(1, position.y / ARENA.height)) * 100) : 0
-    display.altitude = position ? Math.max(0, position.y).toFixed(1) : '0.0'
+    display.orbs = Math.max(0, Math.min(ORB_REWARD.every,
+      popped - (nextOrbReward - ORB_REWARD.every)))
+    airtimeBadge.update(localUser, run.milliseconds / 1000, dt)
+    display.energy = Math.round(Math.max(0, Math.min(1, groundAltitude / ARENA.height)) * 100)
+    display.altitudeMeters = Number.isFinite(groundAltitude) ? Math.max(0, groundAltitude) : 0
+    display.altitude = display.altitudeMeters.toFixed(1)
     const sceneRows = sceneLeaderboard.update(dt, localUser, run.milliseconds / 1000, run.reason)
     if (sceneRows) display.rows = sceneRows
     // Reassert steady wind occasionally. Multiplayer CRDT traffic can briefly remove the
@@ -238,7 +309,6 @@ export function main() {
       progress.url = RealmInfo.getOrNull(engine.RootEntity)?.isPreview ? TUNING.persistence.previewUrl : TUNING.persistence.publicUrl
       progress.rollover(now)
       if (refreshAccumulator >= TUNING.persistence.refreshSeconds) { refreshAccumulator = 0; void progress.sync() }
-      globalLeaderboard.update(progress.rows, progress.status)
       display.medals = progress.medalLabel()
       display.storage = progress.status
     }

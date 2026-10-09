@@ -16,6 +16,11 @@ export class SceneLeaderboard {
     onLeaveScene(userId => this.entries.delete(userId))
   }
 
+  /** Current local and nearby avatar positions for shared obstacle spawn clearance. */
+  positions(): Point[] {
+    return [...this.entries.values()].flatMap(entry => entry.previous ? [{ ...entry.previous }] : [])
+  }
+
   private add(userId: string, name: string, position?: Point): void {
     if (!userId) return
     const entry = this.entries.get(userId) ?? { userId, name, seconds: 0, phase: 'READY' }

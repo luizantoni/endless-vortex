@@ -1,10 +1,10 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { Airtime } = require('../src/airtime.ts')
+const { Airtime, FloorContactLatch } = require('../src/airtime.ts')
 const sample = (patch = {}) => ({ dt: 0.1, wallDt: 0.1, now: Date.parse('2026-09-08T12:00:00Z'),
   inside: true, connected: true, floor: false, supported: false, moved: true, teleported: false, ...patch })
 
-test('airtime runs, platform pauses, departure resumes, floor finishes exactly once', () => {
+test('airtime runs, platform pauses, departure resumes, floor-pad contact resets exactly once', () => {
   const run = new Airtime()
   run.update(sample({ floor: true })); assert.equal(run.phase, 'ready')
   run.update(sample()); run.update(sample()); assert.equal(run.milliseconds, 100)
@@ -13,11 +13,26 @@ test('airtime runs, platform pauses, departure resumes, floor finishes exactly o
   assert.equal(run.phase, 'paused'); assert.equal(run.milliseconds, 100)
   run.update(sample()); run.update(sample()); assert.equal(run.milliseconds, 200)
   assert.equal(run.update(sample({ floor: true })), true)
-  assert.equal(run.phase, 'finished'); assert.equal(run.milliseconds, 200)
+  assert.equal(run.phase, 'finished'); assert.equal(run.milliseconds, 0)
   assert.equal(run.update(sample({ floor: true })), false)
   run.update(sample()); assert.equal(run.phase, 'airborne'); assert.equal(run.milliseconds, 0)
+  assert.equal(run.reason, 'Airborne')
+  const nextRun = new Airtime()
+  nextRun.update(sample()); nextRun.update(sample()); nextRun.update(sample())
+  assert.equal(nextRun.update(sample({ floor: true })), true)
+  assert.equal(nextRun.reason, 'Finished · floor pad · move to restart')
 })
-test('standing, lost focus and app suspension add no time; interruption requires a landing', () => {
+test('one-frame reset-pad contact is latched until the airtime sample consumes it', () => {
+  const run = new Airtime(), contact = new FloorContactLatch()
+  run.update(sample()); run.update(sample()); run.update(sample())
+  assert.equal(run.milliseconds, 200)
+  contact.record(true) // contact lasted only one rendered frame
+  contact.record(false) // avatar has already bounced away before the next timer sample
+  assert.equal(run.update(sample({ floor: contact.consume() })), true)
+  assert.equal(run.milliseconds, 0)
+  assert.equal(contact.consume(), false, 'the same touch only resets once')
+})
+test('standing, lost focus and app suspension add no time; floor-pad contact rearms interrupted run', () => {
   const run = new Airtime()
   run.update(sample()); run.update(sample())
   run.update(sample({ moved: false })); assert.equal(run.milliseconds, 100)
@@ -25,7 +40,19 @@ test('standing, lost focus and app suspension add no time; interruption requires
   assert.equal(run.update(sample({ wallDt: 30 })), true)
   assert.equal(run.milliseconds, 100)
   run.update(sample()); assert.equal(run.phase, 'finished')
-  run.update(sample({ floor: true })); run.update(sample()); assert.equal(run.milliseconds, 0)
+  run.update(sample({ floor: true })); assert.equal(run.milliseconds, 0)
+  run.update(sample()); assert.equal(run.phase, 'airborne'); assert.equal(run.milliseconds, 0)
+})
+test('startup gaps, missing player samples and spawn teleports cannot disarm a not-yet-started mobile run', () => {
+  const run = new Airtime()
+  run.update(sample({ connected: false })) // avatar transform is not ready yet
+  run.update(sample({ dt: 1.2, wallDt: 1.2 })) // slow first client frame
+  run.update(sample({ teleported: true })) // initial spawn placement
+  assert.equal(run.phase, 'ready')
+  run.update(sample())
+  assert.equal(run.phase, 'airborne')
+  run.update(sample())
+  assert.equal(run.milliseconds, 100)
 })
 test('leaving the arena pauses and re-entry resumes without crediting outside time', () => {
   const run = new Airtime()

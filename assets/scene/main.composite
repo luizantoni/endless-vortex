@@ -2,149 +2,6 @@
   "version": 1,
   "components": [
     {
-      "name": "core::Transform",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {
-          "position": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
-            }
-          },
-          "scale": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              }
-            }
-          },
-          "rotation": {
-            "type": "object",
-            "properties": {
-              "x": {
-                "type": "number"
-              },
-              "y": {
-                "type": "number"
-              },
-              "z": {
-                "type": "number"
-              },
-              "w": {
-                "type": "number"
-              }
-            }
-          },
-          "parent": {
-            "type": "integer"
-          }
-        },
-        "serializationType": "transform"
-      },
-      "data": {
-        "512": {
-          "json": {
-            "position": {
-              "x": 23.75,
-              "y": 0,
-              "z": 24.25
-            },
-            "scale": {
-              "x": 1.399999976158142,
-              "y": 1.399999976158142,
-              "z": 1.399999976158142
-            },
-            "rotation": {
-              "x": 0,
-              "y": 0,
-              "z": 0,
-              "w": 1
-            },
-            "parent": 0
-          }
-        }
-      }
-    },
-    {
-      "name": "core::Animator",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {},
-        "serializationType": "protocol-buffer",
-        "protocolBuffer": "PBAnimator"
-      },
-      "data": {
-        "512": {
-          "json": {
-            "states": [
-              {
-                "clip": "Animation",
-                "playing": true,
-                "weight": 1,
-                "speed": 0.5099999904632568,
-                "loop": true,
-                "shouldReset": false
-              }
-            ]
-          }
-        }
-      }
-    },
-    {
-      "name": "core::GltfContainer",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {},
-        "serializationType": "protocol-buffer",
-        "protocolBuffer": "PBGltfContainer"
-      },
-      "data": {
-        "512": {
-          "json": {
-            "src": "assets/models/endless-vortex-plants.glb",
-            "visibleMeshesCollisionMask": 3,
-            "invisibleMeshesCollisionMask": 0
-          }
-        }
-      }
-    },
-    {
-      "name": "core-schema::Name",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {
-          "value": {
-            "type": "string",
-            "serializationType": "utf8-string"
-          }
-        },
-        "serializationType": "map"
-      },
-      "data": {
-        "512": {
-          "json": {
-            "value": "endless-vortex-plants.glb"
-          }
-        }
-      }
-    },
-    {
       "name": "core-schema::Tags",
       "jsonSchema": {
         "type": "object",
@@ -218,9 +75,7 @@
               {
                 "entity": 0,
                 "open": true,
-                "children": [
-                  512
-                ]
+                "children": []
               },
               {
                 "entity": 1,
@@ -229,35 +84,9 @@
               {
                 "entity": 2,
                 "children": []
-              },
-              {
-                "entity": 512,
-                "children": []
               }
             ]
           }
-        }
-      }
-    },
-    {
-      "name": "inspector::TransformConfig",
-      "jsonSchema": {
-        "type": "object",
-        "properties": {
-          "porportionalScaling": {
-            "type": "boolean",
-            "serializationType": "optional",
-            "optionalJsonSchema": {
-              "type": "boolean",
-              "serializationType": "boolean"
-            }
-          }
-        },
-        "serializationType": "map"
-      },
-      "data": {
-        "512": {
-          "json": {}
         }
       }
     },
