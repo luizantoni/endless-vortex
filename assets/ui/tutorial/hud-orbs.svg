@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="152" viewBox="0 0 480 152"><defs>
+ <linearGradient id="ink" x2="1" y2="1"><stop stop-color="#103b4a"/><stop offset=".45" stop-color="#061d2a"/><stop offset="1" stop-color="#040f1b"/></linearGradient>
+ <linearGradient id="gold" x2="1" y2="1"><stop stop-color="#fff0b5"/><stop offset=".4" stop-color="#e6bd60"/><stop offset="1" stop-color="#9f692d"/></linearGradient>
+ <linearGradient id="teal" x2="0" y2="1"><stop stop-color="#2ad8ce"/><stop offset="1" stop-color="#075b75"/></linearGradient>
+ <linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#a9f7ad"/><stop offset=".4" stop-color="#31ad85"/><stop offset="1" stop-color="#0b424b"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#54e8f5" stop-opacity=".25"/><stop offset="1" stop-color="#36cde8" stop-opacity="0"/></radialGradient>
+ <radialGradient id="orb" cx=".35" cy=".3"><stop stop-color="#fffde3"/><stop offset=".35" stop-color="#ffdb72"/><stop offset=".8" stop-color="#b67a21"/><stop offset="1" stop-color="#774013"/></radialGradient>
+ </defs><defs><clipPath id="hud-cutout"><path d="M18 2H462L478 18V134L462 150H18L2 134V18Z"/></clipPath></defs>
+ <path d="M18 2H462L478 18V134L462 150H18L2 134V18Z" fill="url(#ink)" stroke="#65b9b9" stroke-width="2"/>
+ <ellipse cx="70" cy="48.64" rx="384" ry="121.60000000000001" fill="url(#glow)" clip-path="url(#hud-cutout)"/>
+ <path d="M24 8H456L472 24V128L456 144H24L8 128V24Z" fill="none" stroke="#b79655" stroke-opacity=".65"/>
+ <g transform="translate(0 0) scale(1 1)"><path d="M3 50V18L18 3H70L46 10H24L10 24V44Z" fill="url(#gold)"/><path d="M17 46V28L28 17H48" fill="none" stroke="#70dfd2" stroke-width="1.5"/></g><g transform="translate(480 0) scale(-1 1)"><path d="M3 50V18L18 3H70L46 10H24L10 24V44Z" fill="url(#gold)"/><path d="M17 46V28L28 17H48" fill="none" stroke="#70dfd2" stroke-width="1.5"/></g><g transform="translate(0 152) scale(1 -1)"><path d="M3 50V18L18 3H70L46 10H24L10 24V44Z" fill="url(#gold)"/><path d="M17 46V28L28 17H48" fill="none" stroke="#70dfd2" stroke-width="1.5"/></g><g transform="translate(480 152) scale(-1 -1)"><path d="M3 50V18L18 3H70L46 10H24L10 24V44Z" fill="url(#gold)"/><path d="M17 46V28L28 17H48" fill="none" stroke="#70dfd2" stroke-width="1.5"/></g></svg>

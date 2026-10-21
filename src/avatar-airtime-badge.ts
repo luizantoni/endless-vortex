@@ -2,13 +2,15 @@ import { AvatarAnchorPointType, AvatarAttach, Billboard, BillboardMode, engine, 
   MeshRenderer, Transform, VisibilityComponent } from '@dcl/sdk/ecs'
 import { Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { myProfile, parentEntity, syncEntity } from '@dcl/sdk/network'
+import { flightRankTier } from './flight-ranks'
 
 const ROOT = 'assets/ui/modular/'
 const BADGE_ROOT = ROOT + 'avatar-badge/'
 const MAX_GLYPHS = 9
-const GLYPH_HEIGHT = 0.19
+const GLYPH_HEIGHT = 0.16
 const GLYPH_GAP = 0.012
 const PLATE_WIDTH = 1.82
+const SCORE_Y = -0.40
 const VORTEX_PERIOD = 30
 const VORTEX_DURATION = 2.4
 const VORTEX_TICK = 0.1
@@ -28,13 +30,9 @@ function setGlyph(entity: Entity, value: string) {
 }
 
 function setPlate(entity: Entity, seconds: number) {
-  const tier = Math.min(10, Math.floor(Math.max(0, seconds) / 100))
-  const src = tier > 0
-    ? `${ROOT}milestones/milestone-${Math.min(10, tier) * 100}.png`
-    : `${ROOT}streak.png`
-  const alpha = tier > 0
-    ? `${BADGE_ROOT}plate-${Math.min(10, tier) * 100}-alpha.png`
-    : `${BADGE_ROOT}plate-streak-alpha.png`
+  const tier = flightRankTier(seconds)
+  const src = `assets/ui/ranks/rank-${tier}-plate.png`
+  const alpha = `assets/ui/ranks/rank-${tier}-plate-alpha.png`
   Material.setBasicMaterial(entity, { texture: Material.Texture.Common({ src, wrapMode: 1 }),
     alphaTexture: Material.Texture.Common({ src: alpha, wrapMode: 1 }),
     diffuseColor: Color4.White(), castShadows: false })
@@ -60,14 +58,14 @@ export function createAvatarAirtimeBadge() {
     // One billboard parent keeps the plate and every PNG numeral on the exact same plane.
     billboard = engine.addEntity()
     // Use the Explorer's own name-tag anchor so nearby clients keep the badge with
-    // the avatar label; lift it 50 cm above that anchor to avoid covering the name.
-    Transform.create(billboard, { position: Vector3.create(0, 0.5, 0) })
+    // the avatar label; lift it 65 cm above that anchor to avoid covering the name.
+    Transform.create(billboard, { position: Vector3.create(0, 0.65, 0) })
     Billboard.create(billboard, { billboardMode: BillboardMode.BM_ALL })
     syncEntity(billboard, [Transform.componentId, Billboard.componentId])
     parentEntity(billboard, anchor)
 
     plate = engine.addEntity()
-    Transform.create(plate, { scale: Vector3.create(PLATE_WIDTH, PLATE_WIDTH / 3, 1) })
+    Transform.create(plate, { scale: Vector3.create(PLATE_WIDTH, PLATE_WIDTH * 224 / 384, 1) })
     MeshRenderer.setPlane(plate)
     lastTier = setPlate(plate, 0)
     syncEntity(plate, [Transform.componentId, MeshRenderer.componentId, Material.componentId])
@@ -91,7 +89,7 @@ export function createAvatarAirtimeBadge() {
     vortex = engine.addEntity()
     // Center the rotating spiral around the digits; its plane sits between the
     // plate and numerals so the art frames the number instead of obscuring it.
-    Transform.create(vortex, { position: Vector3.create(0, 0, VORTEX_FRONT_OFFSET),
+    Transform.create(vortex, { position: Vector3.create(0, SCORE_Y, VORTEX_FRONT_OFFSET),
       scale: Vector3.create(0.5, 0.5, 1) })
     MeshRenderer.setPlane(vortex)
     Material.setBasicMaterial(vortex, {
@@ -154,7 +152,7 @@ export function createAvatarAirtimeBadge() {
           }
         }
       }
-      const tier = Math.min(10, Math.floor(seconds / 100))
+      const tier = flightRankTier(seconds)
       if (text === lastText && tier === lastTier) return
       if (tier !== lastTier && plate) lastTier = setPlate(plate, seconds)
 
@@ -168,7 +166,7 @@ export function createAvatarAirtimeBadge() {
           const width = widths[i] * fit
           // Plane local forward is opposite the plate's visible face in DCL clients.
           // Negative Z brings the numerals toward the camera and prevents occlusion.
-          Transform.getMutable(glyphs[i]).position = Vector3.create(x + width / 2, 0, -0.04)
+          Transform.getMutable(glyphs[i]).position = Vector3.create(x + width / 2, SCORE_Y, -0.04)
           Transform.getMutable(glyphs[i]).scale = Vector3.create(width, GLYPH_HEIGHT * fit, 1)
           x += width + GLYPH_GAP * fit
         }

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="600" height="24" viewBox="0 0 600 24"><defs>
+ <linearGradient id="ink" x2="1" y2="1"><stop stop-color="#103b4a"/><stop offset=".45" stop-color="#061d2a"/><stop offset="1" stop-color="#040f1b"/></linearGradient>
+ <linearGradient id="gold" x2="1" y2="1"><stop stop-color="#fff0b5"/><stop offset=".4" stop-color="#e6bd60"/><stop offset="1" stop-color="#9f692d"/></linearGradient>
+ <linearGradient id="teal" x2="0" y2="1"><stop stop-color="#2ad8ce"/><stop offset="1" stop-color="#075b75"/></linearGradient>
+ <linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#a9f7ad"/><stop offset=".4" stop-color="#31ad85"/><stop offset="1" stop-color="#0b424b"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#54e8f5" stop-opacity=".25"/><stop offset="1" stop-color="#36cde8" stop-opacity="0"/></radialGradient>
+ <radialGradient id="orb" cx=".35" cy=".3"><stop stop-color="#fffde3"/><stop offset=".35" stop-color="#ffdb72"/><stop offset=".8" stop-color="#b67a21"/><stop offset="1" stop-color="#774013"/></radialGradient>
+ </defs><defs><linearGradient id="altitude-blue"><stop stop-color="#1646b7"/><stop offset=".38" stop-color="#168ce0"/><stop offset=".76" stop-color="#35d4fa"/><stop offset="1" stop-color="#b5faff"/></linearGradient><linearGradient id="altitude-glass" x2="0" y2="1"><stop stop-color="#e7ffff" stop-opacity=".5"/><stop offset=".45" stop-color="#9ff4ff" stop-opacity="0"/><stop offset="1" stop-color="#003870" stop-opacity=".3"/></linearGradient></defs><path d="M7 1H593L599 7V17L593 23H7L1 17V7Z" fill="url(#altitude-blue)"/><path d="M7 1H593L599 7V17L593 23H7L1 17V7Z" fill="url(#altitude-glass)"/><path d="M10 4H590" stroke="#e3ffff" stroke-opacity=".65" stroke-width="2"/></svg>

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="288" viewBox="0 0 256 288"><defs>
+ <linearGradient id="ink" x2="1" y2="1"><stop stop-color="#103b4a"/><stop offset=".45" stop-color="#061d2a"/><stop offset="1" stop-color="#040f1b"/></linearGradient>
+ <linearGradient id="gold" x2="1" y2="1"><stop stop-color="#fff0b5"/><stop offset=".4" stop-color="#e6bd60"/><stop offset="1" stop-color="#9f692d"/></linearGradient>
+ <linearGradient id="teal" x2="0" y2="1"><stop stop-color="#2ad8ce"/><stop offset="1" stop-color="#075b75"/></linearGradient>
+ <linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#a9f7ad"/><stop offset=".4" stop-color="#31ad85"/><stop offset="1" stop-color="#0b424b"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#54e8f5" stop-opacity=".25"/><stop offset="1" stop-color="#36cde8" stop-opacity="0"/></radialGradient>
+ <radialGradient id="orb" cx=".35" cy=".3"><stop stop-color="#fffde3"/><stop offset=".35" stop-color="#ffdb72"/><stop offset=".8" stop-color="#b67a21"/><stop offset="1" stop-color="#774013"/></radialGradient>
+ </defs><defs><linearGradient id="metal" x2="1" y2="1"><stop stop-color="#537184"/><stop offset=".5" stop-color="#112a3b"/><stop offset="1" stop-color="#537184"/></linearGradient></defs>
+   <path d="M65 150L48 269L91 246L116 280L139 167M117 167L149 280L174 246L216 267L192 149" fill="#112d40" stroke="#537184" stroke-width="4"/>
+   <path d="M75 169L65 237M183 170L198 237" stroke="#2c4c60" stroke-width="3"/>
+   <polygon points="128,19 148.44670456309913,33.6918597231636 173.5,31.19168825561607 183.86143571373725,54.13856428626275 206.8083117443839,64.5 204.3081402768364,89.55329543690087 219,110 204.3081402768364,130.44670456309913 206.80831174438393,155.5 183.86143571373725,165.86143571373725 173.5,188.80831174438393 148.44670456309916,186.30814027683638 128,201 107.55329543690085,186.3081402768364 82.50000000000003,188.80831174438393 72.13856428626278,165.86143571373728 49.1916882556161,155.50000000000003 51.6918597231636,130.44670456309913 37,110.00000000000001 51.69185972316359,89.5532954369009 49.191688255616086,64.5 72.13856428626273,54.13856428626275 82.49999999999996,31.1916882556161 107.5532954369008,33.69185972316362" fill="url(#metal)" stroke="#537184" stroke-width="4"/>
+   <circle cx="128" cy="110" r="68" fill="url(#ink)" stroke="#537184" stroke-width="5"/>
+   <circle cx="128" cy="110" r="57" fill="url(#metal)" stroke="#537184" stroke-width="2"/>
+   <path d="M109 104V92C109 66 147 66 147 92V104M105 104H151V140H105Z" fill="none" stroke="#9eb8c8" stroke-width="7"/><circle cx="128" cy="120" r="4" fill="#9eb8c8"/>
+   <path d="M82 189Q128 217 174 189" fill="none" stroke="#537184" stroke-width="5"/>
+  </svg>

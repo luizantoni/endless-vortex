@@ -40,18 +40,19 @@ test('synced airtime badge keeps the 100-second tiers and shows its vortex at ea
     assert.equal(components.AvatarAttach.get(anchor).avatarId, 'runner-wallet')
     assert.equal(components.AvatarAttach.get(anchor).anchorPointId, 1, 'the Explorer name-tag anchor keeps remote badges aligned')
     assert.equal(components.Billboard.get(billboard).billboardMode, 0)
-    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/modular/streak.png')
+    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/ranks/rank-0-plate.png')
     assert.equal(components.Material.get(plate).alphaTexture.src,
-      'assets/ui/modular/avatar-badge/plate-streak-alpha.png', 'plate uses the matching explicit alpha mask')
+      'assets/ui/ranks/rank-0-plate-alpha.png', 'plate uses the matching explicit alpha mask')
     assert.equal(components.Material.get(plate).alphaTest, undefined, 'unlit transparency comes from the alpha texture')
     assert.equal(components.Material.get(glyphs[0]).texture.src, 'assets/ui/modular/avatar-badge/digits/0.png')
     assert.equal(components.Material.get(glyphs[0]).alphaTexture.src,
       'assets/ui/modular/avatar-badge/digits/0-alpha.png', 'digit uses a separately cropped alpha mask')
     assert.equal(components.Material.get(glyphs[0]).alphaTest, undefined)
-    const badgeOffset = [...components.Transform.values()].find(transform => transform.position?.y === 0.5)
-    assert.ok(badgeOffset, 'badge billboard is lifted 50cm above the name-tag anchor')
+    const badgeOffset = [...components.Transform.values()].find(transform => transform.position?.y === 0.65)
+    assert.ok(badgeOffset, 'badge billboard clears the name tag with the taller insignia plate')
     assert.equal(components.VisibilityComponent.get(glyphs[0]).visible, true)
     assert.equal(components.VisibilityComponent.get(glyphs[1]).visible, false, 'subseconds are omitted')
+    assert.equal(components.Transform.get(glyphs[0]).position.y,-.40,'timer sits in the ribbon below the insignia')
     assert.ok(components.Transform.get(glyphs[0]).position.z < 0,
       'digit plane sits in front of the plate in the client camera-facing orientation')
     assert.equal(parents[0].child, billboard)
@@ -65,23 +66,27 @@ test('synced airtime badge keeps the 100-second tiers and shows its vortex at ea
       'each live digit and its visibility are synchronized to nearby clients')
 
     badge.update('runner-wallet', 100.99, 0.05)
-    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/modular/milestones/milestone-100.png')
+    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/ranks/rank-1-plate.png')
     assert.equal(components.Material.get(plate).alphaTexture.src,
-      'assets/ui/modular/avatar-badge/plate-100-alpha.png', 'each milestone frame uses its matching alpha mask')
+      'assets/ui/ranks/rank-1-plate-alpha.png', 'each milestone frame uses its matching alpha mask')
     assert.equal(components.VisibilityComponent.get(glyphs[2]).visible, true, '100.99 displays whole seconds: 100')
     assert.equal(components.VisibilityComponent.get(glyphs[3]).visible, false, 'there are no decimal sprites')
     assert.equal(components.Material.get(glyphs[0]).texture.src, 'assets/ui/modular/avatar-badge/digits/1.png')
     assert.equal(components.Material.get(glyphs[1]).texture.src, 'assets/ui/modular/avatar-badge/digits/0.png')
 
+    for(let tier=2;tier<=10;tier++) {
+      badge.update('runner-wallet',tier*100,.05)
+      assert.equal(components.Material.get(plate).texture.src,`assets/ui/ranks/rank-${tier}-plate.png`)
+    }
     badge.update('runner-wallet', 200.99, 0.05)
-    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/modular/milestones/milestone-200.png')
+    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/ranks/rank-2-plate.png')
     badge.update('runner-wallet', 0, 0.05)
     assert.equal(components.VisibilityComponent.get(glyphs[1]).visible, false,
       'the badge hides the old digits after the lava-floor timer reset')
     assert.equal(components.VisibilityComponent.get(glyphs[0]).visible, true)
     assert.equal(components.Material.get(glyphs[0]).texture.src, 'assets/ui/modular/avatar-badge/digits/0.png',
       'the reset value is zero')
-    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/modular/streak.png',
+    assert.equal(components.Material.get(plate).texture.src, 'assets/ui/ranks/rank-0-plate.png',
       'the plate returns to its starting tier on reset')
     badge.update('runner-wallet', 30, 0.05)
     const [vortex, vortexMaterial] = [...components.Material.entries()].find(([, material]) =>
@@ -92,7 +97,7 @@ test('synced airtime badge keeps the 100-second tiers and shows its vortex at ea
       'the badge vortex appears at 30 seconds')
     const vortexTransform = components.Transform.get(vortex)
     assert.equal(vortexTransform.position.x, 0)
-    assert.equal(vortexTransform.position.y, 0, 'the vortex animation is centered on the timer digits')
+    assert.equal(vortexTransform.position.y, -0.40, 'the vortex animation is centered on the timer digits')
     assert.equal(vortexTransform.position.z, -0.025, 'the ring sits in front of the plate and behind the digits')
     assert.ok(vortexTransform.scale.x >= 0.48, 'the rotating art frames the number group')
     assert.ok(syncFor(vortex).includes('Transform') && syncFor(vortex).includes('VisibilityComponent'),

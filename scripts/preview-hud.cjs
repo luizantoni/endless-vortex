@@ -8,13 +8,20 @@ function snapshot(width,height,seconds){
  '@dcl/sdk/react-ecs':{__esModule:true,default:R,UiEntity:'div',ReactEcsRenderer:{setUiRenderer:f=>render=f}},
  '@dcl/sdk/ecs':{engine:{RootEntity:0,addSystem:f=>update=f},UiCanvasInformation:{getOrNull:()=>({width,height})}},
  '@dcl/sdk/math':{Color4:{create:(r,g,b,a)=>({r,g,b,a})}}}
+ const rankMod={exports:{}}
+ new Function('exports',ts.transpileModule(fs.readFileSync(path.join(root,'src/flight-ranks.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(rankMod.exports)
+ modules['./flight-ranks']=rankMod.exports
+ const tutorialMod={exports:{}}
+ const tutorialCode=ts.transpileModule(fs.readFileSync(path.join(root,'src/tutorial.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,jsxFactory:'ReactEcs.createElement'}}).outputText
+ new Function('require','module','exports',tutorialCode)(n=>modules[n],tutorialMod,tutorialMod.exports)
+ modules['./tutorial']=tutorialMod.exports
  const m={exports:{}}
  const code=ts.transpileModule(fs.readFileSync(path.join(root,'src/airtime-ui.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,jsxFactory:'ReactEcs.createElement'}}).outputText
  new Function('require','module','exports',code)(n=>modules[n],m,m.exports)
  const {display,setupAirtimeUi}=m.exports
  Object.assign(display,{time:seconds,best:'142.38',state:'Airborne',energy:65,orbs:16,localUser:'local',
  rows:['Nova','Kael','You','Lume','Orin'].map((name,i)=>({rank:i+1,userId:i===2?'local':'fixture'+i,name,airtime:(142.38-i*15).toFixed(2)+'s'}))})
- setupAirtimeUi({lift(){},refresh(){},sound(){}});update(.06)
+ setupAirtimeUi();const walk=n=>[n,...n.children.flatMap(walk)];walk(render()).find(n=>n.props.key==='skip').props.onMouseDown();update(.06)
  if(Number(seconds)%10!==0){update(.45);update(.45)}
  return render()
 }
@@ -40,7 +47,7 @@ function html(node){
 }
 const server=http.createServer((req,res)=>{
  const url=new URL(req.url,'http://localhost')
- if(url.pathname.startsWith('/assets/ui/modular/')&&/^[a-z]+\.png$/.test(path.basename(url.pathname))){
+ if(/^\/assets\/ui\/(tutorial|modular|ranks)\/(?:[a-z0-9-]+\/)*[a-z0-9-]+\.png$/.test(url.pathname)){
  const p=path.join(root,url.pathname);if(fs.existsSync(p)){res.setHeader('Content-Type','image/png');return fs.createReadStream(p).pipe(res)}
  }
  if(url.pathname!=='/'){res.writeHead(404);return res.end()}

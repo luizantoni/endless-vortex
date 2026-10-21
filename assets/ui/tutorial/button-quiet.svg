@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="88" viewBox="0 0 400 88"><defs>
+ <linearGradient id="ink" x2="1" y2="1"><stop stop-color="#103b4a"/><stop offset=".45" stop-color="#061d2a"/><stop offset="1" stop-color="#040f1b"/></linearGradient>
+ <linearGradient id="gold" x2="1" y2="1"><stop stop-color="#fff0b5"/><stop offset=".4" stop-color="#e6bd60"/><stop offset="1" stop-color="#9f692d"/></linearGradient>
+ <linearGradient id="teal" x2="0" y2="1"><stop stop-color="#2ad8ce"/><stop offset="1" stop-color="#075b75"/></linearGradient>
+ <linearGradient id="leaf" x2="1" y2="1"><stop stop-color="#a9f7ad"/><stop offset=".4" stop-color="#31ad85"/><stop offset="1" stop-color="#0b424b"/></linearGradient>
+ <radialGradient id="glow"><stop stop-color="#54e8f5" stop-opacity=".25"/><stop offset="1" stop-color="#36cde8" stop-opacity="0"/></radialGradient>
+ <radialGradient id="orb" cx=".35" cy=".3"><stop stop-color="#fffde3"/><stop offset=".35" stop-color="#ffdb72"/><stop offset=".8" stop-color="#b67a21"/><stop offset="1" stop-color="#774013"/></radialGradient>
+ </defs><path d="M16 2H384L398 16V72L384 86H16L2 72V16Z" fill="url(#ink)" stroke="#487a83" stroke-width="2"/><path d="M22 8H378L392 22M8 62V68L22 80H378" fill="none" stroke="#487a83" stroke-opacity=".5"/><path d="M30 4H370" stroke="#fff" stroke-opacity=".22"/></svg>

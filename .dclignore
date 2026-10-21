@@ -36,3 +36,7 @@ cursor.config
 cursorignore
 CLAUDE.md
 AGENTS.md
+
+assets/ui/tutorial/*.svg
+
+assets/ui/ranks/*.svg

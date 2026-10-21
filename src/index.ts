@@ -128,6 +128,7 @@ export function main() {
   let platform = 'mobile'
   let liftScale: number = AIRFLOW.mobileLift // Gentle fallback until the client identifies itself.
   const setPlatform = (value: string) => {
+    display.touchControls = /mobile|android|ios|iphone|ipad/i.test(value)
     platform = value
     liftScale = liftFor(value)
   }
@@ -146,7 +147,10 @@ export function main() {
       }
     } catch { /* Keep the gentle fallback on unsupported clients. */ }
   })()
-  setupAirtimeUi()
+  const uiClick = engine.addEntity()
+  Transform.create(uiClick, { parent: engine.PlayerEntity })
+  AudioSource.create(uiClick, { audioClipUrl: 'assets/sounds/ui-click.wav', playing: false, global: true, volume: .35 })
+  setupAirtimeUi({ onUiClick: () => AudioSource.playSound(uiClick, 'assets/sounds/ui-click.wav', true) })
 
   const footOffset = 0.88, floorTop = ARENA.floorTop, groundSupportTolerance = 0.4
   const floorResetPlatform = createFloorResetPlatform()
