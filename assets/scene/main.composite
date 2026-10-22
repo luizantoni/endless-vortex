@@ -432,15 +432,21 @@
       "data": {
         "0": {
           "json": {
-            "name": "Endless Vortex - 3x3 Airtime",
+            "name": "Endless Vortex",
             "description": "Glide through the enlarged vortex and jump from orbiting platforms. Longest airborne time wins.",
-            "thumbnail": "assets/scene/Images/f94b7898-9e48-44fb-919e-5c402f2f5567-1779052325.jpg",
-            "ageRating": "T",
+            "thumbnail": "assets/Images/endlessvortexthumb.png",
+            "ageRating": "A",
             "categories": [],
             "author": "antonio azzolino",
             "email": "@antonioazzolino",
-            "tags": [],
+            "tags": [
+              ""
+            ],
             "layout": {
+              "base": {
+                "x": 0,
+                "y": 0
+              },
               "parcels": [
                 {
                   "x": 0,
@@ -638,11 +644,7 @@
                   "x": 6,
                   "y": 0
                 }
-              ],
-              "base": {
-                "x": 0,
-                "y": 0
-              }
+              ]
             },
             "silenceVoiceChat": false,
             "disablePortableExperiences": false,
@@ -659,11 +661,8 @@
                     ]
                   },
                   "y": {
-                    "$case": "range",
-                    "value": [
-                      0,
-                      0
-                    ]
+                    "$case": "single",
+                    "value": 0
                   },
                   "z": {
                     "$case": "range",
@@ -680,7 +679,9 @@
                 }
               }
             ],
-            "skyboxConfig": {},
+            "skyboxConfig": {
+              "transitionMode": 0
+            },
             "creator": "",
             "disableNearbyVoiceChat": false,
             "hideLandscapeTerrain": false

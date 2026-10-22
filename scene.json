@@ -2,10 +2,10 @@
   "ecs7": true,
   "runtimeVersion": "7",
   "display": {
-    "title": "Endless Vortex - 3x3 Airtime",
+    "title": "Endless Vortex",
     "description": "Glide through the enlarged vortex and jump from orbiting platforms. Longest airborne time wins.",
     "favicon": "favicon_asset",
-    "navmapThumbnail": "assets/scene/Images/f94b7898-9e48-44fb-919e-5c402f2f5567-1779052325.jpg"
+    "navmapThumbnail": "assets/Images/endlessvortexthumb.png"
   },
   "owner": "",
   "contact": {
@@ -102,12 +102,14 @@
     "nearbyVoiceChat": "enabled"
   },
   "creator": "",
-  "skyboxConfig": {},
+  "skyboxConfig": {
+    "transitionMode": 0
+  },
   "source": {
     "origin": "creator-hub",
     "projectId": "1207b9d2-1c26-422e-a707-894a9e038efa"
   },
-  "rating": "T",
+  "rating": "A",
   "worldConfiguration": {
     "name": "antonioazzolino.dcl.eth"
   },

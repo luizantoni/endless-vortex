@@ -4,7 +4,7 @@ import { startFlightServer } from './flight-server'
 import { authoritativeFlight, startFlightClient, sendFlightInput } from './flight-client'
 import { clearForTakeoff, touchingLava } from './lava-contact'
 import { heldGlideBrake } from './glide-assist'
-import { Animator, AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, Entity, GltfContainer, InputModifier, InputAction, inputSystem, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, Transform } from '@dcl/sdk/ecs'
+import { Animator, AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, Entity, GltfContainer, InputModifier, InputAction, inputSystem, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, TouchScreenControls, Transform } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
 import * as RestrictedActions from '~system/RestrictedActions'
 import { getPlayer } from '@dcl/sdk/players'
@@ -18,7 +18,7 @@ import { TUNING } from './tuning'
 import { ARENA, BUILD_SCALE, insideArena } from './arena'
 import { createRecoveryBubbles } from './bubbles'
 import { createOrbCinematic } from './orb-cinematic'
-import { ORB_REWARD, orbsSinceReset, isOrbRewardDestination } from './orb-reward'
+import { ORB_REWARD, orbsSinceReset, orbTeleportResponseAccepted, orbRewardArrivalStatus } from './orb-reward'
 import { ScenePlayers } from './scene-players'
 import { createRockField } from './rock-field'
 import { RockRecovery } from './rock-recovery'
@@ -40,6 +40,15 @@ export async function main() {
   // Restore the client's normal steering, jump and glider behavior.
   InputModifier.deleteFrom(engine.PlayerEntity)
   AvatarLocomotionSettings.deleteFrom(engine.PlayerEntity)
+  // Native touch controls keep their dynamic jump/double-jump/glide glyph.
+  // This component affects only clients with on-screen controls.
+  TouchScreenControls.createOrReplace(engine.RootEntity, {
+    mainAction: InputAction.IA_JUMP,
+    touchInputs: [InputAction.IA_POINTER, InputAction.IA_PRIMARY, InputAction.IA_SECONDARY,
+      InputAction.IA_ACTION_3, InputAction.IA_ACTION_4, InputAction.IA_ACTION_5, InputAction.IA_ACTION_6]
+      .map(inputAction => ({ inputAction, hide: true })),
+    hideJoystick: false, hideCrosshair: false
+  })
 
   const source = 'assets/models/orchard.glb'
   const previousSource = 'assets/models/endless-vortex-plants.glb'
@@ -66,9 +75,10 @@ export async function main() {
       Animator.deleteFrom(entity)
     }
   }
+  // The orchard trees and authored animated foliage are scenery, not landing surfaces.
   GltfContainer.createOrReplace(environment, {
     src: source,
-    visibleMeshesCollisionMask: ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS,
+    visibleMeshesCollisionMask: ColliderLayer.CL_NONE,
     invisibleMeshesCollisionMask: ColliderLayer.CL_NONE
   })
   Animator.createOrReplace(environment, { states: [{ clip: 'Animation', playing: true, loop: true, speed: 1 }] })
@@ -139,7 +149,7 @@ export async function main() {
     void RestrictedActions.movePlayerTo({ newRelativePosition: destination,
       avatarTarget: { x: destination.x, y: destination.y, z: destination.z+10 } }).then(result => {
       if (pendingReward?.id !== id) return
-      if (result.success) pendingReward.confirmed = true
+      if (orbTeleportResponseAccepted(result)) pendingReward.confirmed = true
       else { cancelOrbReward(); console.error('The five-sphere teleport could not be completed.') }
     }).catch(() => {
       if (pendingReward?.id === id) cancelOrbReward()
@@ -347,8 +357,9 @@ export async function main() {
     // A finished/paused attempt must not disable the basic bubble recovery mechanic.
     const connectedForBubbles = !(wasConnected && RealmInfo.getOrNull(engine.RootEntity)?.isConnectedSceneRoom === false)
     if (pendingReward) {
-      if (!connectedForBubbles || now>pendingReward.until) cancelOrbReward()
-      else if (pendingReward.confirmed && position && isOrbRewardDestination(position)) {
+      const arrival = orbRewardArrivalStatus(position,pendingReward.confirmed,now,pendingReward.until)
+      if (!connectedForBubbles || arrival==='expired') cancelOrbReward()
+      else if (arrival==='arrived' && position) {
         pendingReward=undefined
         if (orbCinematic.start(position)) bubbles.explodeAccumulation(position)
         else cancelOrbReward()

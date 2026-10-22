@@ -55,7 +55,8 @@ test('5x5 scene and Creator Hub parcel/spawn metadata agree', () => {
   assert.ok(expected.every(parcel => scene.scene.parcels.includes(parcel)), 'configured land contains the entire playable footprint')
   assert.deepEqual(meta.layout.parcels.map(p => `${p.x},${p.y}`).sort(), [...scene.scene.parcels].sort())
   assert.equal(meta.disablePortableExperiences, false)
-  for (const axis of ['x', 'y', 'z']) assert.deepEqual(meta.spawnPoints[0].position[axis].value, scene.spawnPoints[0].position[axis])
+  const spawnRange=value=>Array.isArray(value)?value:[value,value]
+  for (const axis of ['x', 'y', 'z']) assert.deepEqual(spawnRange(meta.spawnPoints[0].position[axis].value),spawnRange(scene.spawnPoints[0].position[axis]))
   assert.deepEqual(scene.spawnPoints[0].position.y, [0, 0])
   assert.ok(scene.spawnPoints[0].position.x.every(x => x > 32 && x < 48))
 })
@@ -120,6 +121,16 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   await game.main()
   assert.equal(ecs.InputModifier.has(player), false)
   assert.equal(ecs.AvatarLocomotionSettings.has(player), false)
+  const touch = ecs.TouchScreenControls.get(ecs.engine.RootEntity)
+  assert.equal(touch.mainAction, ecs.InputAction.IA_JUMP, 'jump/glide remains the main native control')
+  assert.equal(touch.hideJoystick, false, 'native steering remains available')
+  assert.ok(!touch.touchInputs.some(button => button.inputAction === ecs.InputAction.IA_JUMP && button.hide),
+    'jump/glide is visible')
+  for (const action of [ecs.InputAction.IA_POINTER, ecs.InputAction.IA_PRIMARY, ecs.InputAction.IA_SECONDARY,
+    ecs.InputAction.IA_ACTION_3, ecs.InputAction.IA_ACTION_4, ecs.InputAction.IA_ACTION_5, ecs.InputAction.IA_ACTION_6]) {
+    assert.ok(touch.touchInputs.some(button => button.inputAction === action && button.hide),
+      'other native right-hand action buttons are hidden')
+  }
   const leafSource = 'assets/models/leaf-platform.glb'
   const leafEntities = () => [...engine.getEntitiesWith(GltfContainer)]
     .filter(([, model]) => model.src === leafSource).map(([id]) => id)
@@ -131,7 +142,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   assert.equal([...engine.getEntitiesWith(ecs.MeshCollider)].length,64,'invisible enclosure uses physics-only wall segments')
   assert.equal([...engine.getEntitiesWith(ecs.AvatarAttach)].length,0,'no scene graphics attach to avatars')
   assert.equal(GltfContainer.get(authoredEnvironment).visibleMeshesCollisionMask,
-    ecs.ColliderLayer.CL_POINTER | ecs.ColliderLayer.CL_PHYSICS)
+    ecs.ColliderLayer.CL_NONE,'modeled orchard trees and animated foliage have no collision')
   assert.equal(GltfContainer.get(authoredEnvironment).invisibleMeshesCollisionMask, 0)
   assert.equal(GltfContainer.get(authoredEnvironment).src, 'assets/models/orchard.glb')
   assert.equal(ecs.Animator.get(authoredEnvironment).states[0].playing, true)

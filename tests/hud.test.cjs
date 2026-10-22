@@ -150,6 +150,43 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
     assert.ok(!walk(tree).some(n=>/\/(panel|row)\.png$/.test(n.props.uiBackground?.texture?.src||'') && (n.props.uiBackground?.texture?.src||'').includes('/modular/')),'old ornate panel and strips are replaced')
 
   }
+  display.touchControls = true
+  for (const [width, height] of [[844,390], [390,844], [568,320], [320,480], [1280,720]]) {
+    size = {width, height, screenInsetArea: {left: 20, right: 12, top: 8, bottom: 10}}
+    update(.06)
+    const tree = render(), panel = find(tree, 'hud-sidebar'), timer = find(tree, 'hud-airtime-card')
+    const orbs = find(tree, 'hud-orbs'), logo = find(panel, 'hud-footer-logo')
+    const tb = timer.props.uiTransform, pb = panel.props.uiTransform, ob = orbs.props.uiTransform
+    assert.ok(Math.abs(tb.position.left + tb.width / 2 - (20 + (width - 32) / 2)) < .01,
+      'mobile airtime is centered within the safe area')
+    assert.ok(tb.position.top < 30, 'mobile airtime sits at the top')
+    assert.ok(find(timer, 'live-timer') && find(timer, 'best-time-digits'), 'timer and best remain together')
+    assert.equal(find(panel, 'live-timer'), undefined, 'leaderboard no longer contains the mobile timer')
+    assert.equal(find(orbs, 'hud-orbs-title'), undefined, 'vertical mobile sphere counter has no title')
+    assert.ok(ob.position.left - 20 < width * .1, 'mobile spheres sit on the left')
+    const altitude=find(tree,'hud-altitude'),ab=altitude.props.uiTransform
+    assert.equal(ab.position.left,32,'mobile altitude aligns to the safe left corner')
+    assert.ok(ab.position.top+ab.height<=ob.position.top,'altitude clears the larger sphere column')
+    assert.ok(ab.position.left+ab.width<=pb.position.left || ab.position.top+ab.height<=pb.position.top,'altitude clears the leaderboard')
+    const first = find(orbs, 'orb-tick-0').props.uiTransform
+    const availableHeight=height-18
+    assert.ok(first.width>Math.min(42,availableHeight*.085)*1.2,'mobile sphere icons are noticeably larger')
+    const last = find(orbs, 'orb-tick-4').props.uiTransform
+    assert.equal(first.position.left, last.position.left)
+    assert.ok(last.position.top > first.position.top, 'all five mobile spheres form a vertical column')
+    assert.ok(logo.props.uiTransform.position.top + logo.props.uiTransform.height <= find(panel, 'hud-nearby').props.uiTransform.position.top,
+      'mobile logo sits above the nearby leaderboard')
+    assert.ok(pb.width < mod.exports.scoreHudLayout(width, height, size.screenInsetArea).width,
+      'mobile leaderboard is smaller than the desktop layout')
+    assert.ok(pb.position.left >= tb.position.left + tb.width || pb.position.top >= tb.position.top + tb.height,
+      'mobile timer clears the leaderboard in either orientation')
+    for (const bounds of [tb, pb, ob, ab]) {
+      assert.ok(bounds.position.left >= 20 && bounds.position.top >= 8)
+      assert.ok(bounds.position.left + bounds.width <= width - 12)
+      assert.ok(bounds.position.top + bounds.height <= height - 10)
+    }
+  }
+  display.touchControls = false
   size={width:1280,height:720,screenInsetArea:{left:24,right:36,top:18,bottom:22}}
   for(const energy of [0,100,150,-10,NaN]) {
     display.energy=energy;update(.06)

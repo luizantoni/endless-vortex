@@ -60,7 +60,7 @@ function heading(name: 'altitude' | 'airtime' | 'nearby' | 'orbs', x: number, y:
   const width = Math.min(maxWidth, height * ratio)
   return tutorialArt(name === 'altitude' ? 'heading-altitude-special' : name === 'airtime' ? 'heading-airtime-special' : name === 'orbs' ? 'heading-teleporting-spheres' : 'heading-' + name + '-light', box(x + (maxWidth - width) / 2, y + (height - width / ratio) / 2, width, width / ratio))
 }
-export function scoreHudLayout(W: number, H: number, inset?: { left: number; right: number; top: number; bottom: number }) {
+export function scoreHudLayout(W: number, H: number, inset?: { left: number; right: number; top: number; bottom: number }, touchControls = false) {
   const l = inset?.left || 0, t = inset?.top || 0
   const w = W - l - (inset?.right || 0), h = H - t - (inset?.bottom || 0)
   const portrait = w < h, dense = h < 400, short = (h < 640 && portrait) || h < 500, compact = h < 560 || portrait
@@ -100,9 +100,36 @@ export function scoreHudLayout(W: number, H: number, inset?: { left: number; rig
   const fixedHeight = rowsY + gap + 44 + footerGap + footerLogoH
   const rowSpace = Math.min(t + h * .74 - y - interactiveHeight, sidebarBottom - y - fixedHeight)
   const maxRows = Math.max(0, Math.min(portrait ? 3 : 5, Math.floor(rowSpace / rowH)))
-  return { x, y, width, pad, gap, titleW, titleH, timerY, timerH, bestY, bestH, stateY, stateH,
+  const desktop = { x, y, width, pad, gap, titleW, titleH, timerY, timerH, bestY, bestH, stateY, stateH,
     nearbyY, nearbyTitleH, rowsY, rowH, fixedHeight, maxRows, footerLogoW, footerLogoH, footerGap, altitudeWidth, altitudeHeight, altitudeX, altitudeY,
     orbX: l + (w - orbWidth) / 2, orbY, orbWidth, orbHeight, orbColumns, orbTitleW, orbTitleH, orbGap, orbSize, orbGridY, compact, portrait }
+  if (!touchControls) return { ...desktop, mobile: false, airtimeX: 0, airtimeY: 0, airtimeWidth: width, airtimeHeight: stateY + stateH }
+  const mobileWidth = Math.min(280, Math.max(170, w * .22), w * .44)
+  const airtimeWidth = Math.min(240, w * (portrait ? .44 : .30))
+  const mobileTitleH = airtimeWidth * .88 * 180 / 800
+  const mobileTimerY = mobileTitleH * .72 + 6, mobileTimerH = h < 400 ? 30 : 38
+  const mobileBestY = mobileTimerY + mobileTimerH, mobileStateY = mobileBestY + 14
+  const airtimeHeight = mobileStateY + 14 + 6
+  const logoW = mobileWidth * 1.02, logoH = logoW * 733 / 2145
+  const mobileNearbyY = logoH + 6, mobileRowsY = mobileNearbyY + 22
+  const mobileY = t + (portrait ? airtimeHeight + 30 : 18)
+  const mobileRowH = 68
+  const mobileMaxRows = Math.max(0, Math.min(3, Math.floor((t + h * .72 - mobileY - mobileRowsY - 48) / mobileRowH)))
+  const mobileAltitudeWidth = Math.min(260,Math.max(180,w*.27),w-mobileWidth-32)
+  const mobileAltitudeHeight = 76
+  const mobileAltitudeY = portrait ? t+18+airtimeHeight+16 : t+18
+  const mobileOrbSize = Math.min(58,h*.12,w*.18)
+  const mobileOrbH = ORB_REWARD.every * mobileOrbSize - (ORB_REWARD.every - 1) * 5
+  return { ...desktop, mobile: true, x: l + w - mobileWidth - 12, y: mobileY, width: mobileWidth,
+    pad: 8, gap: 4, rowH: mobileRowH, maxRows: mobileMaxRows,
+    titleW: airtimeWidth * .88, titleH: mobileTitleH, timerY: mobileTimerY, timerH: mobileTimerH,
+    bestY: mobileBestY, bestH: 14, stateY: mobileStateY, stateH: 14,
+    nearbyY: mobileNearbyY, nearbyTitleH: 22, rowsY: mobileRowsY,
+    footerLogoW: logoW, footerLogoH: logoH, footerGap: 0,
+    airtimeX: l + (w - airtimeWidth) / 2, airtimeY: t + 18, airtimeWidth, airtimeHeight,
+    altitudeX: l+12, altitudeY: mobileAltitudeY, altitudeWidth: mobileAltitudeWidth, altitudeHeight: mobileAltitudeHeight,
+    orbX: l + 12, orbY: Math.max(t+90,t+(h-mobileOrbH)/2,mobileAltitudeY+mobileAltitudeHeight+12), orbWidth: mobileOrbSize,
+    orbHeight: mobileOrbH, orbColumns: 1, orbSize: mobileOrbSize, orbGap: -5, orbGridY: 0 }
 }
 
 export function formatAirtime(value: string | number, hundredths = true) {
@@ -254,7 +281,7 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
     const lowAltitudeWarning = display.state === 'Airborne' &&
       (Number(display.time) || 0) >= 10 && display.altitudeMeters < .4
     const vignetteOpacity = .68 + .16 * ((Math.sin(clock * 5) + 1) / 2)
-    const layout = scoreHudLayout(W, H, inset)
+    const layout = scoreHudLayout(W, H, inset, display.touchControls)
     const { x: px, y: py, width: pw, pad, gap, rowH, compact, portrait } = layout
     const s = Math.min(1, w / 1280, h / 720), sec = Number(display.time) || 0
     const leaders = display.rows.slice(0, layout.maxRows)
@@ -265,45 +292,32 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
     }
     const rowCount = Math.max(leaders.length, layout.maxRows > 0 ? 1 : 0)
     const guideY = layout.rowsY + rowCount * rowH + gap
-    const footerY = guideY + 44 + layout.footerGap
-    const panelH = footerY + layout.footerLogoH * .70
+    const footerY = layout.mobile ? 0 : guideY + 44 + layout.footerGap
+    const panelH = layout.mobile ? guideY + 44 + pad : footerY + layout.footerLogoH * .70
     const state = display.state === 'Airborne' ? 'AIRBORNE' : /Finished|Interrupted/.test(display.state) ? 'FINISHED' : /Paused/.test(display.state) ? 'PAUSED' : 'READY'
     const orbCount = Math.max(0, Math.min(ORB_REWARD.every, display.orbs))
     const { orbX, orbY, orbWidth: ow, orbHeight: oh, orbColumns } = layout
     const { orbSize, orbGap, orbGridY } = layout
     const orbGridW = orbColumns * orbSize + (orbColumns - 1) * orbGap
     const mw = layout.altitudeWidth, mh = layout.altitudeHeight, mx = layout.altitudeX, my = layout.altitudeY
-    const altitudeDigitsH = h < 500 ? 20 : 26, altitudeScoreY = 4
+    const altitudeDigitsH = layout.mobile || h < 500 ? 20 : 26
     const altitudeValue = Number.parseFloat(display.altitude)
     const altitudeText = Math.max(0, Number.isFinite(altitudeValue) ? altitudeValue : 0).toFixed(1)
     const altitudeDigitsW = Math.min(mw * .70, altitudeDigitsH * altitudeText.split('').reduce((sum, c) => sum + (c === '.' ? .24 : .7), 0))
-    const altitudeValueX = mw - altitudeDigitsW - 30
-    const altitudeTitleW = Math.min(mw * .68, (h < 500 ? 26 : 34) * 1.25 * 920 / 180, altitudeValueX - 24)
+    const altitudeValueX = layout.mobile ? (mw-altitudeDigitsW-18)/2 : mw-altitudeDigitsW-30
+    const altitudeTitleW = layout.mobile ? Math.min(mw-16,160) : Math.min(mw * .68, (h < 500 ? 26 : 34) * 1.25 * 920 / 180, altitudeValueX - 24)
     const altitudeTitleH = altitudeTitleW * 180 / 920
-    cached = <UiEntity uiTransform={{ width: '100%', height: '100%', pointerFilter: 'none' }}>
-      {lowAltitudeWarning && lowAltitudeVignette(W, H, vignetteOpacity)}
-      <UiEntity key="hud-orbs" uiTransform={box(orbX, orbY, ow, oh)}>
-        {tutorialArt('hud-orbs', {...box(0, 0, ow, oh), opacity: .8})}
-        <UiEntity key="hud-orbs-title" uiTransform={box((ow - layout.orbTitleW) / 2, -layout.orbTitleH * .3, layout.orbTitleW, layout.orbTitleH)}>
-          {heading('orbs', 0, 0, layout.orbTitleW, layout.orbTitleH)}
-        </UiEntity>
-        {Array.from({ length: ORB_REWARD.every }, (_, i) => {
-          const x = (ow - orbGridW) / 2 + (i % orbColumns) * (orbSize + orbGap)
-          const y = orbGridY + Math.floor(i / orbColumns) * (orbSize + orbGap)
-          return <UiEntity key={'orb-tick-' + i} uiTransform={box(x, y, orbSize, orbSize)}>
-            {i < orbCount ? art('vortex', box(0, 0, orbSize, orbSize)) : tutorialArt('orb-slot-empty', box(0, 0, orbSize, orbSize))}
-          </UiEntity>
-        })}
-      </UiEntity>
-      <UiEntity key="hud-sidebar" uiTransform={box(px, py, pw, panelH)}>
-        {tutorialArt('hud-panel', {...box(0, 0, pw, panelH), opacity: .8})}
-        <UiEntity key="hud-airtime" uiTransform={box((pw - layout.titleW) / 2, -layout.titleH * .30, layout.titleW, layout.titleH)}>
+    const altitudeScoreY = layout.mobile ? altitudeTitleH+6 : 4
+    const aw = layout.airtimeWidth
+    const airtimeCard = <UiEntity key="hud-airtime-card" uiTransform={box(layout.mobile ? layout.airtimeX : 0, layout.mobile ? layout.airtimeY : 0, aw, layout.airtimeHeight)}>
+      {layout.mobile && tutorialArt('hud-orbs', { ...box(0, 0, aw, layout.airtimeHeight), opacity: .8 })}
+        <UiEntity key="hud-airtime" uiTransform={box((aw - layout.titleW) / 2, -layout.titleH * .30, layout.titleW, layout.titleH)}>
           {heading('airtime', 0, 0, layout.titleW, layout.titleH)}
         </UiEntity>
-        <UiEntity key="live-timer" uiTransform={{...box(pad, layout.timerY, pw - pad * 2, layout.timerH),overflow:'hidden'}}>
+        <UiEntity key="live-timer" uiTransform={{...box(pad, layout.timerY, aw - pad * 2, layout.timerH),overflow:'hidden'}}>
           {(() => {
             const age=clock-resetStart,active=age>=0&&age<.65,p=Math.min(1,Math.max(0,age/.45))
-            const ease=1-Math.pow(1-p,3),width=pw-pad*2
+            const ease=1-Math.pow(1-p,3),width=aw-pad*2
             return <UiEntity uiTransform={{width:'100%',height:'100%',pointerFilter:'none'}}>
               {active && <UiEntity key="timer-reset-glow" uiTransform={{...box(0,0,width,layout.timerH),opacity:1-age/.65}}>
                 {tutorialArt('timer-reset-glow',box(0,0,width,layout.timerH))}
@@ -318,15 +332,35 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
             </UiEntity>
           })()}
         </UiEntity>
-        <UiEntity key="best-time" uiTransform={box(pad, layout.bestY, pw - pad * 2, layout.bestH)}>
-          <UiEntity uiTransform={box((pw - pad * 2 - (32 + layout.bestH * 4.8)) / 2, 0, 30, layout.bestH)}
+        <UiEntity key="best-time" uiTransform={box(pad, layout.bestY, aw - pad * 2, layout.bestH)}>
+          <UiEntity uiTransform={box((aw - pad * 2 - (32 + layout.bestH * 4.8)) / 2, 0, 30, layout.bestH)}
             uiText={label('BEST', compact ? 11 : 13, cyan)} />
-          <UiEntity key="best-time-digits" uiTransform={box((pw - pad * 2 - (32 + layout.bestH * 4.8)) / 2 + 32, 0, layout.bestH * 4.8, layout.bestH)}>
+          <UiEntity key="best-time-digits" uiTransform={box((aw - pad * 2 - (32 + layout.bestH * 4.8)) / 2 + 32, 0, layout.bestH * 4.8, layout.bestH)}>
             {display.bestLoaded ? numbers(formatAirtime(display.best), layout.bestH * .94, layout.bestH * 4.8) : <UiEntity uiTransform={{width:'100%',height:'100%'}} uiText={{...label('LOADING',11,dim),font:'sans-serif'}} />}
           </UiEntity>
         </UiEntity>
-        {layout.stateH > 0 && <UiEntity uiTransform={box(pad, layout.stateY, pw - pad * 2, layout.stateH)}
+        {layout.stateH > 0 && <UiEntity uiTransform={box(pad, layout.stateY, aw - pad * 2, layout.stateH)}
           uiText={label(!display.bestLoaded?'RECORDS LOADING':display.storage.includes('SAVING')?'SAVING RECORD':state,11,!display.bestLoaded?gold:state==='AIRBORNE'?cyan:dim)} />}
+    </UiEntity>
+    cached = <UiEntity uiTransform={{ width: '100%', height: '100%', pointerFilter: 'none' }}>
+      {lowAltitudeWarning && lowAltitudeVignette(W, H, vignetteOpacity)}
+      {layout.mobile && airtimeCard}
+      <UiEntity key="hud-orbs" uiTransform={box(orbX, orbY, ow, oh)}>
+        {!layout.mobile && tutorialArt('hud-orbs', {...box(0, 0, ow, oh), opacity: .8})}
+        {!layout.mobile && <UiEntity key="hud-orbs-title" uiTransform={box((ow - layout.orbTitleW) / 2, -layout.orbTitleH * .3, layout.orbTitleW, layout.orbTitleH)}>
+          {heading('orbs', 0, 0, layout.orbTitleW, layout.orbTitleH)}
+        </UiEntity>}
+        {Array.from({ length: ORB_REWARD.every }, (_, i) => {
+          const x = (ow - orbGridW) / 2 + (i % orbColumns) * (orbSize + orbGap)
+          const y = orbGridY + Math.floor(i / orbColumns) * (orbSize + orbGap)
+          return <UiEntity key={'orb-tick-' + i} uiTransform={box(x, y, orbSize, orbSize)}>
+            {i < orbCount ? art('vortex', box(0, 0, orbSize, orbSize)) : tutorialArt('orb-slot-empty', box(0, 0, orbSize, orbSize))}
+          </UiEntity>
+        })}
+      </UiEntity>
+      <UiEntity key="hud-sidebar" uiTransform={box(px, py, pw, panelH)}>
+        {tutorialArt('hud-panel', {...box(0, 0, pw, panelH), opacity: .8})}
+        {!layout.mobile && airtimeCard}
         <UiEntity key="hud-nearby" uiTransform={box(pad, layout.nearbyY, pw - pad * 2, layout.nearbyTitleH)}>
           {heading('nearby', 0, 0, pw - pad * 2, layout.nearbyTitleH)}
         </UiEntity>
@@ -365,9 +399,9 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
         <UiEntity key="hud-footer-logo" uiTransform={box((pw - layout.footerLogoW) / 2, footerY, layout.footerLogoW, layout.footerLogoH)}
           uiBackground={{ texture: { src: 'assets/ui/endless-vortex-logo.png', filterMode: 'bi-linear', wrapMode: 'clamp' }, textureMode: 'stretch' }} />
       </UiEntity>
-      {!portrait && <UiEntity key="hud-altitude" uiTransform={box(mx, my, mw, mh)}>
+      {(layout.mobile || !portrait) && <UiEntity key="hud-altitude" uiTransform={box(mx, my, mw, mh)}>
         {tutorialArt('hud-altitude', {...box(0, 0, mw, mh), opacity: .8})}
-        <UiEntity key="altitude-title" uiTransform={box(12, -altitudeTitleH * .20, altitudeTitleW, altitudeTitleH)}>
+        <UiEntity key="altitude-title" uiTransform={box(layout.mobile ? (mw-altitudeTitleW)/2 : 12, layout.mobile ? 0 : -altitudeTitleH*.20, altitudeTitleW, altitudeTitleH)}>
           {heading('altitude', 0, 0, altitudeTitleW, altitudeTitleH)}
         </UiEntity>
         <UiEntity key="altitude-value" uiTransform={box(altitudeValueX, altitudeScoreY, altitudeDigitsW, altitudeDigitsH)}>
@@ -375,8 +409,8 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
         </UiEntity>
         <UiEntity uiTransform={box(altitudeValueX + altitudeDigitsW + 4, altitudeScoreY, 14, altitudeDigitsH)}
           uiText={label('m', 13, cyan, 'middle-left')} />
-        <UiEntity uiTransform={box(12, mh - 22, mw - 24, 16)}>
-          {altitudeGauge(display.energy, mw - 24, 16)}
+        <UiEntity uiTransform={box(12, mh-(layout.mobile ? 16 : 22), mw-24, layout.mobile ? 10 : 16)}>
+          {altitudeGauge(display.energy, mw-24, layout.mobile ? 10 : 16)}
         </UiEntity>
       </UiEntity>}
       {clock-resetStart>=0 && clock-resetStart<.7 && <UiEntity key="takeoff-vignette"

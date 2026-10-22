@@ -30,3 +30,5 @@ require('./flight-client.test.cjs')
 require('./flight-feedback.test.cjs')
 
 require('./orb-cinematic.test.cjs')
+
+require('./orb-reward.test.cjs')

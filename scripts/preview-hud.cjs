@@ -1,7 +1,7 @@
 // Local visual fixture: renders the actual HUD component tree as HTML, not the DCL client.
 const fs=require('node:fs'),path=require('node:path'),http=require('node:http'),ts=require('typescript')
 const root=path.resolve(__dirname,'..')
-function snapshot(width,height,seconds){
+function snapshot(width,height,seconds,mobile){
  let render,update
  const R={createElement:(type,props,...children)=>({props:props||{},children:children.flat(Infinity).filter(Boolean)})}
  const modules={
@@ -11,6 +11,7 @@ function snapshot(width,height,seconds){
  const rankMod={exports:{}}
  new Function('exports',ts.transpileModule(fs.readFileSync(path.join(root,'src/flight-ranks.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(rankMod.exports)
  modules['./flight-ranks']=rankMod.exports
+ modules['./orb-reward']={ORB_REWARD:{every:5}}
  const tutorialMod={exports:{}}
  const tutorialCode=ts.transpileModule(fs.readFileSync(path.join(root,'src/tutorial.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,jsxFactory:'ReactEcs.createElement'}}).outputText
  new Function('require','module','exports',tutorialCode)(n=>modules[n],tutorialMod,tutorialMod.exports)
@@ -19,7 +20,7 @@ function snapshot(width,height,seconds){
  const code=ts.transpileModule(fs.readFileSync(path.join(root,'src/airtime-ui.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,jsxFactory:'ReactEcs.createElement'}}).outputText
  new Function('require','module','exports',code)(n=>modules[n],m,m.exports)
  const {display,setupAirtimeUi}=m.exports
- Object.assign(display,{time:seconds,best:'142.38',state:'Airborne',energy:65,orbs:16,localUser:'local',
+ Object.assign(display,{touchControls:mobile,bestLoaded:true,time:seconds,best:'142.38',state:'Airborne',energy:65,altitude:'65.0',altitudeMeters:65,orbs:3,localUser:'local',
  rows:['Nova','Kael','You','Lume','Orin'].map((name,i)=>({rank:i+1,userId:i===2?'local':'fixture'+i,name,airtime:(142.38-i*15).toFixed(2)+'s'}))})
  setupAirtimeUi();const walk=n=>[n,...n.children.flatMap(walk)];walk(render()).find(n=>n.props.key==='skip').props.onMouseDown();update(.06)
  if(Number(seconds)%10!==0){update(.45);update(.45)}
@@ -47,6 +48,7 @@ function html(node){
 }
 const server=http.createServer((req,res)=>{
  const url=new URL(req.url,'http://localhost')
+ if(url.pathname==='/assets/ui/endless-vortex-logo.png'){res.setHeader('Content-Type','image/png');return fs.createReadStream(path.join(root,url.pathname)).pipe(res)}
  if(/^\/assets\/ui\/(tutorial|modular|ranks)\/(?:[a-z0-9-]+\/)*[a-z0-9-]+\.png$/.test(url.pathname)){
  const p=path.join(root,url.pathname);if(fs.existsSync(p)){res.setHeader('Content-Type','image/png');return fs.createReadStream(p).pipe(res)}
  }
@@ -55,7 +57,7 @@ const server=http.createServer((req,res)=>{
  const time=url.searchParams.get('time')||'78.24'
  if(w<300||w>2000||h<300||h>1200){res.writeHead(400);return res.end()}
  res.setHeader('Content-Type','text/html; charset=utf-8')
- res.end('<!doctype html><title>HUD layout fixture</title><style>body{margin:0;background:#0a1826;color:white}nav{height:44px;padding:8px;font:14px Georgia}a{color:#7ff;margin-right:20px}#stage{position:relative;background:radial-gradient(ellipse at center,#3b7187,#152d40);transform-origin:top left}</style><nav>Desktop and landscape HUD fixture · placeholder portraits · <a href="/?w=1280&h=720">Desktop</a><a href="/?w=844&h=390">Landscape phone</a><a href="/?w='+w+'&h='+h+'&time=123456.78">Long numbers</a><a href="/?w='+w+'&h='+h+'&time=80.00">Streak</a></nav><div id="stage" style="width:'+w+'px;height:'+h+'px">'+html(snapshot(w,h,time))+'</div><script>function fit(){document.querySelector("#stage").style.transform="scale("+Math.min(1,innerWidth/'+w+', (innerHeight-50)/'+h+')+")"}fit();onresize=fit</script>')
+ res.end('<!doctype html><title>HUD layout fixture</title><style>body{margin:0;background:#0a1826;color:white}nav{height:44px;padding:8px;font:14px Georgia}a{color:#7ff;margin-right:20px}#stage{position:relative;background:radial-gradient(ellipse at center,#3b7187,#152d40);transform-origin:top left}</style><nav>Responsive HUD fixture · placeholder portraits · <a href="/?w=1280&h=720">Desktop</a><a href="/?w=844&h=390&mobile=1">Landscape phone</a><a href="/?w=390&h=844&mobile=1">Portrait phone</a><a href="/?w='+w+'&h='+h+'&time=123456.78">Long numbers</a><a href="/?w='+w+'&h='+h+'&time=80.00">Streak</a></nav><div id="stage" style="width:'+w+'px;height:'+h+'px">'+html(snapshot(w,h,time,url.searchParams.get('mobile')==='1'))+'</div><script>function fit(){document.querySelector("#stage").style.transform="scale("+Math.min(1,innerWidth/'+w+', (innerHeight-50)/'+h+')+")"}fit();onresize=fit</script>')
 })
 const port=Number(process.argv[2])||8127
 server.listen(port,'127.0.0.1',()=>console.log('HUD fixture: http://127.0.0.1:'+port))
