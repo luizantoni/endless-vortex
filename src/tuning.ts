@@ -1,3 +1,4 @@
+import { BUILD_SCALE } from './arena'
 // V1 playtest defaults, not validated balance. Distances are metres, times seconds.
 export const TUNING = {
   arena: { center: 16, halfWidth: 10, floorY: 0.35, ceilingY: 22, ceilingBrakeY: 18, dangerY: 4 },
@@ -16,13 +17,12 @@ export const TUNING = {
     spacing: 4, clearance: 2.5, minPushY: 8,
     pushImpulse: 3, pushCooldown: 1.5
   },
-  rocks: { stepDelay: 1, floatHeight: 0.12, floatFrequency: 2.4, idleHoverHeight: 0.11, idleHoverFrequency: 0.16,
-    fallDuration: 0.3, fallDistance: 5, respawnDelay: 10, riseDuration: 0.8 },
+  rocks: { stepDelay: 1, floatHeight: 0.12 * BUILD_SCALE, floatFrequency: 2.4, idleHoverHeight: 0.11 * BUILD_SCALE, idleHoverFrequency: 0.16,
+    fallDuration: 0.3, fallDistance: 5 * BUILD_SCALE, respawnDelay: 10, riseDuration: 0.8 },
   blueLavaVortex: { y: 0.12, scale: 1.2, materialInterval: 1 / 12, uvOrbitPeriodSeconds: 24, uvOffsetRadius: 0.16,
     pulseFrequency: 0.7, emissiveMin: 0.6, emissiveMax: 1.4 },
   bubbles: { count: 12, radius: 0.95, liftImpulse: 2.2, maxUp: 4, cooldown: 0.65, respawn: 7, topY: 17 },
   audio: { clip: 'assets/sounds/hit3.mp3', defaultVolume: 0.5, minInterval: 0.18 },
-  medals: [15, 30, 60] as readonly number[],
   visuals: { interval: 1 / 20 },
   // Used only in local preview. Set an HTTPS URL for a hosted playtest service.
   persistence: { previewUrl: 'http://127.0.0.1:8787', publicUrl: '', refreshSeconds: 30 },

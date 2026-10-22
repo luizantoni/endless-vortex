@@ -1,6 +1,6 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { advance, newAttempt, bubbleImpulse, pushImpulse, dayKey, weekKey, windForce, medalsFor, speedCorrection, milliseconds } = require('../src/rules.ts')
+const { advance, newAttempt, bubbleImpulse, pushImpulse, dayKey, weekKey, windForce, speedCorrection, milliseconds } = require('../src/rules.ts')
 const { createCourse, phaseAt, safeSpawn, SLOTS, intervalAt } = require('../src/course.ts')
 const { TUNING: T } = require('../src/tuning.ts')
 const now = Date.parse('2026-09-08T12:00:00Z')
@@ -119,10 +119,6 @@ test('bounded wind brakes ceiling ascent, fast descent and horizontal escape', (
   const down = windForce({ x: 16, y: 10, z: 16 }, { x: 0, y: -15, z: 0 }); assert.ok(down.y > 0)
   const edge = windForce({ x: 25.5, y: 10, z: 16 }, { x: 20, y: 0, z: 0 }); assert.ok(edge.x < 0)
   for (const force of [up, down, edge]) for (const value of Object.values(force)) assert.ok(Math.abs(value) <= T.movement.maxForce)
-})
-test('medals use configurable airtime thresholds', () => {
-  assert.deepEqual(medalsFor(T.medals[0] - 0.001), [false, false, false])
-  assert.deepEqual(medalsFor(T.medals[1]), [true, true, false])
 })
 test('velocity corrections target configured speed bounds without changing in-range motion', () => {
   assert.deepEqual(speedCorrection({ x: 1, y: 1, z: 1 }), { x: 0, y: 0, z: 0 })

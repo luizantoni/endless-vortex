@@ -6,12 +6,7 @@ fs.mkdirSync(out,{recursive:true})
 const moduleRanks={exports:{}}
 new Function('exports',ts.transpileModule(fs.readFileSync(path.join(root,'src/flight-ranks.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(moduleRanks.exports)
 const ranks=moduleRanks.exports.FLIGHT_RANKS
-const palettes=[
- ['#d5e6ee','#6d8c9a','#243f52'],['#ffdda1','#c17c3b','#6c3617'],['#ffebba','#d38c3e','#793c18'],
- ['#f6ffff','#92bed7','#355d82'],['#f5ffff','#abd8ed','#397eab'],['#e8ffff','#32d5ed','#0862a1'],
- ['#fff8c7','#ffc23e','#98500d'],['#fffbd3','#ffcb4b','#aa4e12'],['#ffffff','#bcecff','#5385b7'],
- ['#e7fff5','#56f0cf','#08757e'],['#fffde2','#ffe17b','#c48319']
-]
+const palettes=moduleRanks.exports.RANK_PALETTES
 const star=(x,y,r,fill)=>{let d='';for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,s=i%2?r*.43:r;d+=(i?'L':'M')+(x+Math.cos(a)*s).toFixed(2)+' '+(y+Math.sin(a)*s).toFixed(2)}return `<path d="${d}Z" fill="${fill}" stroke="#71421a" stroke-width="1.5"/>`}
 const pieces=[]
 for(let tier=0;tier<ranks.length;tier++){
@@ -37,6 +32,9 @@ for(let tier=0;tier<ranks.length;tier++){
   const png=new Resvg(svg).render().asPng();fs.writeFileSync(path.join(out,name+'.png'),png)
   return png
  }
+ const orb=`<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64"><defs><radialGradient id="sphere" cx=".32" cy=".27" r=".75"><stop stop-color="${light}"/><stop offset=".3" stop-color="${metal}"/><stop offset="1" stop-color="${dark}"/></radialGradient><radialGradient id="halo"><stop stop-color="${metal}" stop-opacity=".4"/><stop offset="1" stop-color="${metal}" stop-opacity="0"/></radialGradient></defs><circle cx="32" cy="32" r="31" fill="url(#halo)"/><circle cx="32" cy="32" r="20" fill="url(#sphere)"/><ellipse cx="25" cy="24" rx="7" ry="4" fill="${light}" opacity=".7" transform="rotate(-35 25 24)"/></svg>`
+ fs.writeFileSync(path.join(out,`rank-${tier}-orb.svg`),orb)
+ fs.writeFileSync(path.join(out,`rank-${tier}-orb.png`),new Resvg(orb).render().asPng())
  save(`rank-${tier}`,192,icon)
  const png=save(`rank-${tier}-plate`,224,icon+`<path d="M76 174H308L322 188V207L308 221H76L62 207V188Z" fill="url(#shield)" stroke="url(#gold)" stroke-width="3"/><path d="M82 179H302M82 216H302" stroke="#6adcf0" stroke-width="1.5"/>`)
  const img=PNG.sync.read(png),alpha=Buffer.alloc(img.width*img.height)

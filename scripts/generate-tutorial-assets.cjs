@@ -12,7 +12,9 @@ const defs = `<defs>
  <radialGradient id="orb" cx=".35" cy=".3"><stop stop-color="#fffde3"/><stop offset=".35" stop-color="#ffdb72"/><stop offset=".8" stop-color="#b67a21"/><stop offset="1" stop-color="#774013"/></radialGradient>
  </defs>`
 function save(name, w, h, body) {
- const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${defs}${body}</svg>`
+ const panelDefs = ['panel', 'hud-panel', 'hud-orbs', 'hud-altitude', 'goal'].includes(name)
+   ? defs.replace('#103b4a', '#164c78').replace('#061d2a', '#0a294b').replace('#040f1b', '#06152d') : defs
+ const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${panelDefs}${body}</svg>`
  fs.writeFileSync(path.join(root, name + '.svg'), svg)
  fs.writeFileSync(path.join(root, name + '.png'), new Resvg(svg).render().asPng())
 }

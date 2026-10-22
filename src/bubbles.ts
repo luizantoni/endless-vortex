@@ -1,15 +1,16 @@
 import { AudioSource, Billboard, BillboardMode, engine, Material, MaterialTransparencyMode, MeshRenderer, Transform, VisibilityComponent } from '@dcl/sdk/ecs'
 import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
-import { ARENA, Point } from './arena'
-import { BUBBLES as B, BubbleLift, goldenVortexCelebrationPoint, goldenVortexOrbitPoint,
+import { ARENA, BUILD_SCALE, Point } from './arena'
+import { BUBBLES as B, BubbleLift, goldenPlayerWrapPoint, goldenVortexOrbitPoint,
   goldenVortexParticlePoint, sweptBubbleContact } from './bubble-rules'
+import { ORB_CINEMATIC } from './orb-cinematic'
 import { createSharedRandom, onSharedObstacleEvent, publishSharedObstacleEvent } from './shared-obstacles'
 
 const vortexTexture = 'assets/ui/modular/vortex.png'
 
 // Height lanes sit between platform surfaces so normal orbits don't repeatedly hide/re-spawn bubbles.
 const slots = [3.5, 7, 10.5, 15].flatMap((y, layer) => Array.from({ length: 12 }, (_, index) => ({
-  y, radius: [9, 13, 17][(index + layer) % 3], angle: index * Math.PI / 6 + layer * 0.3
+  y: y * BUILD_SCALE, radius: [9, 13, 17][(index + layer) % 3] * BUILD_SCALE, angle: index * Math.PI / 6 + layer * 0.3
 })))
 
 export function createRecoveryBubbles(_blocked: (point: Point, radius: number) => boolean, random = Math.random) {
@@ -41,7 +42,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
     VisibilityComponent.create(vortex, { visible: false })
     return { entity, billboard, vortex, index, slot: slots[(index * 5) % slots.length],
       mode: 'waiting' as 'waiting' | 'active' | 'popping',
-      readyAt: 0.2 + index * 0.16, expires: 0, poppedAt: 0, glowAt: -Infinity,
+      readyAt: 0.2 + index * 0.16, poppedAt: 0, glowAt: -Infinity,
       // A stable slot per orb keeps an orb index tied to the same world
       // position on every client, even when one peer delays its appearance.
       point: { x: 0, y: 0, z: 0 } }
@@ -60,6 +61,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
   })
   const burstSparks = sparks.slice(B.accumulationCapacity)
   let nextSpark = B.accumulationCapacity
+  let accumulationPops = 0
 
   function visible(item: typeof pool[number], value: boolean) {
     VisibilityComponent.getMutable(item.entity).visible = value
@@ -72,10 +74,10 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
   function position(slot: typeof slots[number]): Point {
     const angle = slot.angle + time * B.orbitDegrees * Math.PI / 180
     return { x: ARENA.center.x + Math.cos(angle) * slot.radius,
-      y: slot.y + Math.sin(time * 1.5 + slot.angle) * 0.2, z: ARENA.center.z + Math.sin(angle) * slot.radius }
+      y: slot.y + Math.sin(time * 1.5 + slot.angle) * 0.2 * BUILD_SCALE, z: ARENA.center.z + Math.sin(angle) * slot.radius }
   }
   function showSpark(particle: typeof sparks[number]) {
-    Transform.getMutable(particle.entity).scale = Vector3.create(particle.size, particle.size, particle.size)
+    Transform.getMutable(particle.entity).scale = Vector3.create(particle.size * BUILD_SCALE, particle.size * BUILD_SCALE, particle.size * BUILD_SCALE)
     const shade = particle.shade
     Material.setPbrMaterial(particle.entity, { albedoColor: Color4.create(1, 0.58 + shade * 0.35, 0.12 + shade * 0.55, 1),
       emissiveColor: Color3.create(1, 0.42 + shade * 0.42, 0.04 + shade * 0.22),
@@ -84,9 +86,9 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
     particle.active = true
     VisibilityComponent.getMutable(particle.entity).visible = true
   }
-  function emitSparks(origin: Point, orbIndex: number) {
-    // A six-mote cohort joins a 60-mote maximum ring: exactly ten pickups.
-    const cohort = orbIndex % B.accumulationEvery
+  function emitSparks(origin: Point) {
+    // Each pickup adds twelve motes to the current five-pickup cycle.
+    const cohort = accumulationPops++ % B.accumulationEvery
     for (let i = 0; i < B.accumulationPerPop; i++) {
       const slot = cohort * B.accumulationPerPop + i
       const particle = sparks[slot]
@@ -94,8 +96,8 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
       particle.angle = slot * Math.PI * 2 / B.accumulationCapacity
       particle.phase = random() * Math.PI * 2; particle.size = 0.105 + random() * 0.045
       particle.shade = (i + cohort % 4) / 5
-      particle.orbitRadius = B.accumulationRadius + (slot % 3) * 0.42
-      particle.orbitHeight = ARENA.center.y + 3 + Math.floor(slot / 12) * 0.58
+      particle.orbitRadius = B.accumulationRadius + (slot % 3) * 0.42 * BUILD_SCALE
+      particle.orbitHeight = ARENA.center.y + (3 + Math.floor(slot / 12) * 0.58) * BUILD_SCALE
       showSpark(particle)
     }
     for (let i = 0; i < B.particlesPerPop; i++) {
@@ -123,7 +125,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
     if (item.mode !== 'active') return false
     item.mode = 'popping'
     item.poppedAt = time - Math.max(0, (Date.now() - at) / 1000)
-    emitSparks(item.point, item.index)
+    emitSparks(item.point)
     return true
   }
   const stopListening = onSharedObstacleEvent(event => {
@@ -176,7 +178,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
             item.readyAt = time + 1
             continue
           }
-          item.mode = 'active'; item.expires = time + B.lifetime
+          item.mode = 'active'
           spawned = true
           transform.scale = Vector3.create(B.radius * 2, B.radius * 2, B.radius * 2)
           vortexTransform.scale = Vector3.create(1, 1, 1)
@@ -196,7 +198,6 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
         }
         const bubbleBefore = item.point
         item.point = position(item.slot)
-        if (time >= item.expires) { wait(item, 1); continue }
         transform.position = { ...item.point }
         transform.rotation = Quaternion.fromEulerDegrees(15, (time * B.spinDegrees + item.slot.angle * 180 / Math.PI) % 360, 0)
         vortexTransform.rotation = Quaternion.fromEulerDegrees(0, 0,
@@ -226,7 +227,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
         if (!particle.active) continue
         const age = time - particle.born
         const lifetime = particle.kind === 'orbit' ? Number.POSITIVE_INFINITY :
-          particle.kind === 'celebrate' ? B.rewardExplosionLifetime : B.particleLifetime
+          particle.kind === 'celebrate' ? ORB_CINEMATIC.duration : B.particleLifetime
         const fraction = age / lifetime
         if (fraction >= 1) {
           particle.active = false
@@ -235,8 +236,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
         }
         const shimmer = 0.65 + 0.35 * Math.sin(age * 24 + particle.phase)
         if (particle.kind === 'celebrate') {
-          Transform.getMutable(particle.entity).position = goldenVortexCelebrationPoint(
-            particle.index, age, particle.phase)
+          Transform.getMutable(particle.entity).position = goldenPlayerWrapPoint(player || particle.origin, particle.index, age)
         } else if (particle.kind === 'orbit') {
           Transform.getMutable(particle.entity).position = goldenVortexOrbitPoint(particle.origin, particle.angle,
             particle.orbitRadius, particle.orbitHeight, particle.phase, age)
@@ -245,9 +245,9 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
             particle.angle, particle.pitch, particle.burstSpeed, particle.radialSpeed, particle.spin,
             particle.riseSpeed, particle.phase, age)
         }
-        const burstScale = particle.kind !== 'orbit' && age < B.particleBurstDuration ?
+        const burstScale = particle.kind === 'burst' && age < B.particleBurstDuration ?
           1 + 2.4 * (1 - age / B.particleBurstDuration) : 1
-        const size = particle.size * burstScale * (0.72 + shimmer * 0.55) *
+        const size = particle.size * BUILD_SCALE * burstScale * (0.72 + shimmer * 0.55) *
           (particle.kind === 'orbit' ? 1 : 1 - fraction)
         Transform.getMutable(particle.entity).scale = Vector3.create(size, size, size)
         if (time - particle.materialAt >= B.particleMaterialInterval) {
@@ -267,19 +267,28 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
       AudioSource.getMutable(sound).volume = volume
       if (volume === 0) AudioSource.stopSound(sound, true)
     },
-    explodeAccumulation() {
-      // Reuse the whole 128-spark pool for a dense, two-second crown burst.
+    resetAccumulation() {
+      accumulationPops = 0
+      for (const particle of sparks) {
+        particle.active = false
+        particle.kind = 'idle'
+        VisibilityComponent.getMutable(particle.entity).visible = false
+      }
+    },
+    explodeAccumulation(player: Point) {
+      // Wrap the real player in three strands of miniature golden spheres.
       for (let i = 0; i < sparks.length; i++) {
         const particle = sparks[i]
         particle.born = time
         particle.kind = 'celebrate'
+        particle.origin = { ...player }
         particle.phase = (i % 17) * 0.17
-        particle.size = 0.1 + (i % 4) * 0.025
+        particle.size = 0.045 + (i % 4) * 0.012
         particle.shade = (i % 6) / 5
         particle.materialAt = -Infinity
         particle.active = true
-        Transform.getMutable(particle.entity).position = goldenVortexCelebrationPoint(i, 0, particle.phase)
-        Transform.getMutable(particle.entity).scale = Vector3.create(particle.size, particle.size, particle.size)
+        Transform.getMutable(particle.entity).position = goldenPlayerWrapPoint(player, i, 0)
+        Transform.getMutable(particle.entity).scale = Vector3.create(particle.size * BUILD_SCALE, particle.size * BUILD_SCALE, particle.size * BUILD_SCALE)
         VisibilityComponent.getMutable(particle.entity).visible = true
       }
     },

@@ -1,7 +1,8 @@
+import { createContactSound } from './contact-audio'
 import { ColliderLayer, engine, Entity, GltfContainer, Transform, TriggerArea, triggerAreaEventsSystem,
   VisibilityComponent } from '@dcl/sdk/ecs'
 import { Vector3 } from '@dcl/sdk/math'
-import { ARENA } from './arena'
+import { ARENA, BUILD_SCALE, GROUND_ASSET_LIFT } from './arena'
 import { ROCK_LAYOUT } from './rock-layout'
 import { TUNING } from './tuning'
 import { onSharedObstacleEvent, publishSharedObstacleEvent } from './shared-obstacles'
@@ -29,7 +30,7 @@ type Rock = {
 }
 
 let sharedField: ReturnType<typeof makeField> | undefined
-const ROCK_SCALE = 1.2
+const ROCK_SCALE = 1.2 * BUILD_SCALE
 
 function overlapsPlayer(rock: Rock, player: Vector3 | undefined): boolean {
   if (!player) return false
@@ -49,7 +50,7 @@ function touchesRockBounds(rock: Rock, player: Vector3 | undefined): boolean {
   const bottom = player.y - 0.88, top = player.y + 0.88
   return player.x + radius >= rock.home.x + rock.minX && player.x - radius <= rock.home.x + rock.maxX &&
     player.z + radius >= rock.home.z + rock.minZ && player.z - radius <= rock.home.z + rock.maxZ &&
-    top >= transform.position.y + rock.minY && bottom <= transform.position.y + rock.maxY
+    top >= transform.position.y + rock.minY && bottom <= transform.position.y + rock.maxY + 0.2
 }
 
 function placeSensor(rock: Rock) {
@@ -62,13 +63,14 @@ function placeSensor(rock: Rock) {
 }
 
 function makeField() {
+  const playContact = createContactSound('assets/sounds/rocktouch.mp3')
   let elapsed = 0
   let hoverAccumulator = 0
   const models = [...engine.getEntitiesWith(GltfContainer)]
   const rocks: Rock[] = ROCK_LAYOUT.map((layout, index) => {
     const entity = models.find(([, model]) => model.src === layout.src)?.[0] ?? engine.addEntity()
     const sensor = engine.addEntity()
-    const home = Vector3.create(ARENA.center.x + layout.x, layout.y, ARENA.center.z + layout.z)
+    const home = Vector3.create(ARENA.center.x + layout.x * BUILD_SCALE, layout.y * BUILD_SCALE + GROUND_ASSET_LIFT, ARENA.center.z + layout.z * BUILD_SCALE)
     Transform.createOrReplace(entity, { position: home, scale: Vector3.create(ROCK_SCALE, ROCK_SCALE, ROCK_SCALE) })
     GltfContainer.createOrReplace(entity, { src: layout.src,
       visibleMeshesCollisionMask: ColliderLayer.CL_POINTER | ColliderLayer.CL_PHYSICS,
@@ -97,7 +99,10 @@ function makeField() {
     rock.state = 'armed'
     rock.armedAt = elapsed - (broadcast ? 0 : Math.max(0, (Date.now() - at) / 1000))
     TriggerArea.deleteFrom(rock.sensor)
-    if (broadcast) publishSharedObstacleEvent('rock', rock.index, 'step')
+    if (broadcast) {
+      playContact()
+      publishSharedObstacleEvent('rock', rock.index, 'step')
+    }
     return true
   }
 
@@ -114,11 +119,11 @@ function makeField() {
       return rock ? armRock(rock, true) : false
     },
     isRock(entity: Entity | undefined): boolean {
-      return rocks.some(rock => rock.entity === entity)
+      return rocks.some(rock => rock.entity === entity && (rock.state === 'ready' || rock.state === 'armed'))
     },
     isPlayerTouchingRock(player?: Vector3): boolean {
-      return rocks.some(rock => rock.state !== 'hidden' && rock.state !== 'rising' &&
-        (touchesRockBounds(rock, player) || overlapsPlayer(rock, player)))
+      return rocks.some(rock => (rock.state === 'ready' || rock.state === 'armed') &&
+        touchesRockBounds(rock, player))
     },
     /** Grounded support check against transformed visible bounds; broad overlap is not enough. */
     isPlayerSupportedByRock(player?: Vector3): boolean {

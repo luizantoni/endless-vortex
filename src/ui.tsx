@@ -3,7 +3,7 @@ import { Color4 } from '@dcl/sdk/math'
 
 export const hud = {
   seconds: '0.000', best: '0.000', status: 'READY', detail: 'Leave the launch deck to begin',
-  day: '', medals: 'Medals: 15 / 30 / 60 seconds', storage: 'Connecting to records…',
+  day: '', storage: 'Connecting to records…',
   volume: 50, danger: false, rows: ['No weekly records yet'], week: '', open: false
 }
 const white = Color4.create(0.9, 0.97, 1, 1)
@@ -18,7 +18,6 @@ export function setupUi(actions: { replay: () => void; volume: () => void; refre
         <UiEntity uiTransform={{ height: 36, width: '100%' }} uiText={{ value: `${hud.seconds}s   BEST ${hud.best}s`, fontSize: 25, color: white }} />
         <UiEntity uiTransform={{ height: 24, width: '100%' }} uiText={{ value: `${hud.status} · ${hud.detail}`, fontSize: 13,
           color: hud.danger ? Color4.create(1, 0.45, 0.2, 1) : white }} />
-        <UiEntity uiTransform={{ height: 21, width: '100%' }} uiText={{ value: hud.medals, fontSize: 12, color: white }} />
         <UiEntity uiTransform={{ height: 20, width: '100%' }} uiText={{ value: hud.storage, fontSize: 11, color: white }} />
       </UiEntity>
       <UiEntity uiTransform={{ width: '100%', maxWidth: 520, height: 48, flexDirection: 'row', margin: { top: 4 } }}>

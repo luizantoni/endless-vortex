@@ -5,6 +5,7 @@ module.exports = save => {
  for (const [name, word, w, h, blue] of [
   ['heading-airtime-special', 'AIRTIME', 800, 180, true],
   ['heading-orbs-special', 'ORBS', 540, 180, false],
+  ['heading-teleporting-spheres', 'TELEPORTING SPHERES', 2200, 180, false],
   ['heading-altitude-special', 'ALTITUDE', 920, 180, true]
  ]) {
   const baseline = 142

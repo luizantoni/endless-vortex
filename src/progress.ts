@@ -1,11 +1,11 @@
-import { medalsFor, weekKey } from './rules'
-import { TUNING as T } from './tuning'
+import { weekKey } from './rules'
+import { flightRankTier } from './flight-ranks'
 
 type Row = { userId: string; name: string; airtimeMs: number; rank: number }
 type Result = { userId: string; name: string; airtimeMs: number; day: string; finishedAt: number }
 export class Progress {
   bestMs = 0
-  medals = [false, false, false]
+  get rankTier() { return flightRankTier(this.bestMs/1000) }
   rows: Row[] = []
   week = weekKey(Date.now())
   status = 'Session records only — service not configured'
@@ -19,12 +19,11 @@ export class Progress {
     if (userId === this.userId) { this.name = name; return }
     this.generation++
     this.userId = userId; this.name = name
-    this.bestMs = 0; this.medals = [false, false, false]; this.rows = []; this.pending = []
+    this.bestMs = 0; this.rows = []; this.pending = []
     this.status = this.url ? 'Connecting to records…' : 'Session records only — service not configured'
   }
   record(airtimeMs: number, day: string, now: number): void {
     this.bestMs = Math.max(this.bestMs, airtimeMs)
-    this.medals = this.medals.map((earned, index) => earned || medalsFor(airtimeMs / 1000)[index])
     if (!this.userId || airtimeMs <= 0 || !this.url) return
     const result = { userId: this.userId, name: this.name, airtimeMs, day, finishedAt: now }
     const index = this.pending.findIndex(item => weekKey(item.finishedAt) === weekKey(now))
@@ -54,7 +53,6 @@ export class Progress {
       if (generation !== this.generation) return
       if (!Number.isSafeInteger(data.bestMs) || data.bestMs < 0 || typeof data.week !== 'string' || !Array.isArray(data.rows)) throw new Error('Invalid records response')
       this.bestMs = Math.max(this.bestMs, data.bestMs)
-      this.medals = this.medals.map((earned, i) => earned || data.medals?.[i] === true || medalsFor(this.bestMs / 1000)[i])
       this.week = weekKey(Date.now())
       // An in-flight Sunday response must not repopulate Monday's cleared table.
       this.rows = data.week === this.week ? data.rows.filter((row: Row) => typeof row.name === 'string' && Number.isSafeInteger(row.airtimeMs) &&
@@ -68,8 +66,5 @@ export class Progress {
   rollover(now: number): void {
     const week = weekKey(now)
     if (week !== this.week) { this.week = week; this.rows = []; void this.sync() }
-  }
-  medalLabel(): string {
-    return ['Bronze', 'Silver', 'Gold'].map((name, i) => `${this.medals[i] ? '✓' : '○'} ${name} ${T.medals[i]}s`).join(' · ')
   }
 }

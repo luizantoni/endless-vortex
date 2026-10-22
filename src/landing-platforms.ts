@@ -1,21 +1,23 @@
+import { createContactSound } from './contact-audio'
 import { ColliderLayer, engine, GltfContainer, Transform, VisibilityComponent } from '@dcl/sdk/ecs'
 import { Quaternion, Vector3 } from '@dcl/sdk/math'
-import { ARENA } from './arena'
+import { ARENA, BUILD_SCALE } from './arena'
+import { leafLocalPoint, touchesLeaf } from './leaf-contact'
 import { createSharedRandom, onSharedObstacleEvent, publishSharedObstacleEvent } from './shared-obstacles'
 
 type Point = { x: number; y: number; z: number }
+export const LEAF_SCALE = BUILD_SCALE * 0.9
 const LEAF_MODEL = 'assets/models/leaf-platform.glb'
 export const LANDINGS = {
-  count: 48, radius: 1.93, halfWidth: 0.98, thickness: 0.73, warning: 1.2,
-  collapseDelay: 2, collapseWarning: 2, fallDuration: 2, fallAcceleration: 12,
+  count: 48, radius: 1.93 * LEAF_SCALE, halfWidth: 0.98 * LEAF_SCALE, thickness: 0.73 * LEAF_SCALE, warning: 1.2,
+  collapseDelay: 0.3, collapseWarning: 0.3, fallDuration: 2, fallAcceleration: 12 * BUILD_SCALE,
   interval: 0.45, jitter: 0.25, firstSpawn: 0.6,
-  clearance: 3.5, spacing: 4, orbitRadius: 14.5, upperOrbitRadius: 13.5, orbitDegrees: 8,
-  orbitWobbleDegrees: 4, radialWobble: 0.45, verticalWobble: 0.18,
-  selfSpinMin: 35, selfSpinMax: 70, selfTumbleRange: 40,
-  contactEpsilon: 0.005,
+  clearance: 3.5 * BUILD_SCALE, spacing: 4 * BUILD_SCALE, orbitRadius: 14.5 * BUILD_SCALE, upperOrbitRadius: 13.5 * BUILD_SCALE, orbitDegrees: 8,
+  orbitWobbleDegrees: 4, radialWobble: 0.45 * BUILD_SCALE, verticalWobble: 0.18 * BUILD_SCALE,
+  selfSpinMin: 8, selfSpinMax: 12, selfTumbleRange: 0,
+  contactEpsilon: 0.35,
   heights: [3 * ARENA.scale, 5.5 * ARENA.scale, 8 * ARENA.scale, 10 * ARENA.scale] as readonly number[]
 } as const
-const LEAF_SCALE = 1 // Preserve the source model's proportions.
 export const landingSlots: Point[] = LANDINGS.heights.flatMap((y, level) => {
   const count = level < 2 ? 16 : 24
   const radius = level < 2 ? LANDINGS.orbitRadius : LANDINGS.upperOrbitRadius
@@ -58,6 +60,7 @@ function clearLandingForPlayers(point: Point, players: Point[], occupied: Point[
 }
 
 export function createLandingPlatforms(random: () => number = Math.random) {
+  const playContact = createContactSound('assets/sounds/leavestouch.mp3')
   const pool = Array.from({ length: LANDINGS.count }, () => {
     const entity = engine.addEntity()
     Transform.create(entity, { scale: Vector3.create(LEAF_SCALE, LEAF_SCALE, LEAF_SCALE) })
@@ -68,7 +71,7 @@ export function createLandingPlatforms(random: () => number = Math.random) {
       landedAt: undefined as number | undefined, fallAge: undefined as number | undefined,
       motion: { phase: 0, angleRate: 0.6, radialRate: 0.7, verticalRate: 0.9,
         spinDegrees: 140, tiltDegrees: LANDINGS.selfTumbleRange / 2, tiltRate: 0.8, tiltAxis: 0 },
-      slot: { x: 0, y: 0, z: 0 }, point: { x: 0, y: 0, z: 0 }, previousPoint: { x: 0, y: 0, z: 0 } }
+      fallStartY: 0, slot: { x: 0, y: 0, z: 0 }, point: { x: 0, y: 0, z: 0 }, previousPoint: { x: 0, y: 0, z: 0 } }
     return item
   })
   pool.forEach((item, index) => { item.index = index })
@@ -100,7 +103,10 @@ export function createLandingPlatforms(random: () => number = Math.random) {
     if (item.landedAt !== undefined) return
     item.landedAt = item.age - (broadcast ? 0 : Math.max(0, (Date.now() - at) / 1000))
     item.styleTick = -1
-    if (broadcast) publishSharedObstacleEvent('leaf', item.index, 'collapse')
+    if (broadcast) {
+      playContact()
+      publishSharedObstacleEvent('leaf', item.index, 'collapse')
+    }
   }
   const stopListening = onSharedObstacleEvent(event => {
     if (event.kind !== 'leaf' || event.action !== 'collapse') return
@@ -119,7 +125,7 @@ export function createLandingPlatforms(random: () => number = Math.random) {
         item.age += dt
         if (item.fallAge !== undefined) {
           item.fallAge += dt
-          item.point.y = item.slot.y - 0.5 * LANDINGS.fallAcceleration * item.fallAge ** 2
+          item.point.y = item.fallStartY - 0.5 * LANDINGS.fallAcceleration * item.fallAge ** 2
           if (item.fallAge >= LANDINGS.fallDuration || item.point.y <= ARENA.floorTop + LANDINGS.thickness / 2) {
             hide(item); continue
           }
@@ -129,10 +135,13 @@ export function createLandingPlatforms(random: () => number = Math.random) {
         item.previousPoint = item.point
         item.point = windOrbitPoint(item.slot, orbitTime, item.motion)
         place(item)
+        if (item.solid && player && touchesLeaf(player, item.point, Transform.get(item.entity).rotation,
+          LANDINGS.radius, LANDINGS.halfWidth, LANDINGS.thickness)) armCollapse(item)
         if (item.landedAt !== undefined && item.age - item.landedAt >= LANDINGS.collapseDelay - 1e-6) {
           // Collapse releases the player immediately; the visible deck drops without pushing anyone.
           release(item)
           item.fallAge = 0
+          item.fallStartY = item.point.y
           continue
         }
         if (!item.solid && item.age >= LANDINGS.warning) {
@@ -147,7 +156,7 @@ export function createLandingPlatforms(random: () => number = Math.random) {
         item.styleTick = styleTick
         const remaining = item.landedAt === undefined ? undefined : LANDINGS.collapseDelay - (item.age - item.landedAt)
         const expiring = remaining !== undefined && remaining <= LANDINGS.collapseWarning
-        const pulse = expiring ? 1 + (Math.floor(remaining! * 8) % 2) * 0.035 : 1
+        const pulse = 1 // Keep the collision surface stable throughout the countdown.
         Transform.getMutable(item.entity).scale = Vector3.create(LEAF_SCALE * pulse,
           LEAF_SCALE * pulse, LEAF_SCALE * pulse)
       }
@@ -185,6 +194,15 @@ export function createLandingPlatforms(random: () => number = Math.random) {
         pendingCollapses.delete(item.index)
       }
     },
+    supportsPlayer(player?: Point) {
+      if (!player) return false
+      return pool.some(item => {
+        if (!item.solid) return false
+        const p=leafLocalPoint({...player,y:player.y-.88},item.point,Transform.get(item.entity).rotation)
+        return Math.abs(p.x)<=LANDINGS.radius+.2 && Math.abs(p.z)<=LANDINGS.halfWidth+.2 &&
+          Math.abs(p.y-LANDINGS.thickness/2)<=.25
+      })
+    },
     isPlatform(entity: number | undefined) {
       return pool.some(item => item.entity === entity)
     },
@@ -201,7 +219,9 @@ export function createLandingPlatforms(random: () => number = Math.random) {
       footOffset: number) {
       if (!player || !hit) return false
       const item = pool.find(candidate => candidate.entity === entity && candidate.solid)
-      const distance = Math.hypot(player.x - hit.x, player.y - footOffset - hit.y, player.z - hit.z)
+      // Test the avatar capsule, including side and underside contact, against an actual mesh ray hit.
+      const vertical = Math.max(0, Math.abs(player.y - hit.y) - footOffset)
+      const distance = Math.hypot(player.x - hit.x, vertical, player.z - hit.z)
       if (!item || distance > LANDINGS.contactEpsilon) return false
       // A short ray from the feet point hit this leaf's visible collider, regardless of approach direction.
       armCollapse(item)

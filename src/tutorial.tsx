@@ -6,8 +6,8 @@ const gold = Color4.create(1, .83, .49, 1), cyan = Color4.create(.55, .96, .92, 
 const white = Color4.create(.93, .97, .97, 1)
 export const FLIGHT_LESSONS = [
   { name: 'THE UPDRAFT', title: 'Meet your\nsecond wind.', art: 'flight',
-    body: 'Jump into the blue vortex at the center. Ride the current upward, then steer and glide to stay in the air.',
-    shortBody: 'Jump into the central blue vortex. Ride the updraft, then steer and glide to stay airborne.',
+    body: 'Enter the central vortex to receive lift. Ride upward, then steer and glide to stay in the air.',
+    shortBody: 'Enter the central vortex for lift. Ride upward, then steer and glide.',
     goal: 'STAY AIRBORNE.',
     keyboard: 'ESC  ·  cursor     W A S D  ·  steer     SPACE  ·  jump', touch: 'Drag the movement stick. Tap the jump control.', cue: 'FIRST FLIGHT  /  Catch the central current' },
   { name: 'STEER & GLIDE', title: 'Find your flow.', art: 'glide',
@@ -15,19 +15,19 @@ export const FLIGHT_LESSONS = [
     shortBody: 'Ride the current to climb. Glide toward golden orbs, then return to the central vortex.',
     goal: 'FIND YOUR FLOW.',
     keyboard: 'Use your Explorer’s native jump and glide controls.', touch: 'Use the Explorer’s on-screen jump and glide controls.', cue: 'FLIGHT PATH  /  Rise, glide, return' },
-  { name: 'GOLDEN ORBS', title: 'Ten sparks.\nBack to the sky.', art: 'orbs',
-    body: 'Orbs give a small boost. Every tenth orb returns you to the center, 30 meters up. Your airtime keeps running.',
-    shortBody: 'Orbs give a boost. Every tenth orb returns you 30 meters up. Your airtime keeps running.',
-    goal: 'COLLECT 10 ORBS.',
-    keyboard: 'No interaction key needed. Fly into an orb to collect it.', touch: 'No extra tap needed. Fly into an orb to collect it.', cue: 'ORB CHAIN  /  Collect 10 for a return to the sky' },
+  { name: 'GOLDEN ORBS', title: 'Five sparks.\nBack to the sky.', art: 'orbs',
+    body: 'Orbs give a small boost. Every fifth sphere returns you above the vortex floor, then lifts you upward. Your airtime keeps running.',
+    shortBody: 'Orbs give a boost. Every fifth sphere lifts you from the vortex center. Your airtime keeps running.',
+    goal: 'COLLECT 5 SPHERES.',
+    keyboard: 'No interaction key needed. Fly into an orb to collect it.', touch: 'No extra tap needed. Fly into an orb to collect it.', cue: 'ORB CHAIN  /  Collect 5 for a return to the sky' },
   { name: 'LIVING PLATFORMS', title: 'Rest. Then rise.', art: 'leaf',
-    body: 'Leaves pause your airtime, but collapse two seconds after landing. Jump off before they fall. Rocks fall too.',
-    shortBody: 'Leaves pause airtime but collapse after two seconds. Jump off quickly. Rocks fall too.',
+    body: 'Leaves keep moving and fall 0.3 seconds after contact. Standing pauses airtime. Jump off quickly. Rocks fall too.',
+    shortBody: 'Leaves keep moving and drop 0.3 seconds after contact. Jump off quickly.',
     goal: 'JUMP. DON’T WAIT.',
     keyboard: 'Steer toward a leaf. Jump back into the current.', touch: 'Guide your landing, then tap jump to leave the leaf.', cue: 'QUICK RECOVERY  /  Leaves buy time, not safety' },
   { name: 'CHASE YOUR BEST', title: 'Make every\nsecond count.', art: 'airtime',
-    body: 'Airborne time is your score. The floor ends your run; take off to try again. Earn medals at 15, 30 and 60 seconds.',
-    shortBody: 'The floor ends your run. Take off to try again. Earn medals at 15, 30 and 60 seconds.',
+    body: 'Airborne time is your score. Blue lava locks your result; take off to start fresh. Earn a new flight rank every 100 airborne seconds.',
+    shortBody: 'Blue lava locks your score. Take off to start fresh. Earn a new flight rank every 100 airborne seconds.',
     goal: 'BEAT YOUR BEST.',
     keyboard: 'Press ESC to free the cursor when you need this guide.', touch: 'Reopen FLIGHT GUIDE from the HUD whenever you need it.', cue: 'YOU ARE READY  /  The sky is yours' }
 ] as const
@@ -55,7 +55,7 @@ const text = (value: string, fontSize: number, color = white, align: 'middle-lef
 })
 function art(name: string, bounds: UiTransformProps) {
   return <UiEntity uiTransform={bounds} uiBackground={{ texture: { src: ROOT + name + '.png',
-    filterMode: 'bi-linear', wrapMode: 'clamp' }, textureMode: 'stretch' }} />
+    filterMode: 'bi-linear', wrapMode: 'clamp' }, textureMode: 'stretch', ...(bounds.opacity === undefined ? {} : { color: Color4.create(1, 1, 1, Number(bounds.opacity)) }) }} />
 }
 
 /** Session-local guide. It teaches without changing movement, scoring or world state. */
@@ -143,9 +143,9 @@ export function createFlightTutorial(playClick: () => void = () => {}) {
       const slide = Math.max(0, Math.min(8, footerY - goalY - goalH - 8))
       return <UiEntity uiTransform={box(0, 0, W, H)}>
         <UiEntity uiTransform={{ ...box(0, 0, W, H), pointerFilter: 'block' }}
-          uiBackground={{ color: Color4.create(.005, .015, .025, .82) }} onMouseDown={() => {}} />
+          uiBackground={{ color: Color4.create(.01, .025, .06, .24) }} onMouseDown={() => {}} />
         <UiEntity key="tutorial-panel" uiTransform={{ ...box(x, y, w, h), overflow: 'visible' }}>
-          {art('panel', box(0, 0, w, h))}
+          {art('panel', {...box(0, 0, w, h), opacity: .84})}
           <UiEntity key="tutorial-logo" uiTransform={box((w - logoW) / 2, -logoH * .30, logoW, logoH)} uiBackground={{ texture: {
             src: 'assets/ui/endless-vortex-logo.png', filterMode: 'bi-linear', wrapMode: 'clamp'
           }, textureMode: 'stretch' }} />
@@ -167,7 +167,7 @@ export function createFlightTutorial(playClick: () => void = () => {}) {
             <UiEntity uiTransform={box(tx, titleY, tw, titleH)} uiText={text(lesson.title.replace('\n', ' '), titleSize, white)} />
             <UiEntity uiTransform={box(tx, bodyY, tw, bodyH)} uiText={text(shortLandscape || (portrait && compact) ? lesson.shortBody : lesson.body, bodySize, white)} />
             <UiEntity key="goal" uiTransform={box(goalX, goalY, goalW, goalH)}>
-              {art('goal', box(0, 0, goalW, goalH))}
+              {art('goal', {...box(0, 0, goalW, goalH), opacity: .6})}
               <UiEntity uiTransform={box(14, 4, goalW - 28, 24)} uiText={text('GOAL', 18, cyan)} />
               <UiEntity uiTransform={box(14, 30, goalW - 28, goalH - 34)} uiText={text(lesson.goal, goalSize, gold)} />
             </UiEntity>

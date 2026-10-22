@@ -1,4 +1,4 @@
-import { ARENA, scalePoint, Point as Position } from './arena'
+import { ARENA, BUILD_SCALE, scalePoint, Point as Position } from './arena'
 type WindArea = { id: 'broad' | 'central'; center: Position; size: Position; lift: number }
 
 // Preserve the prototype's orbit. Lift multipliers apply to every updraft source.
@@ -8,15 +8,15 @@ export const AIRFLOW = {
   rotationEnabled: true,
   center: ARENA.center,
   radius: 5 * ARENA.scale,
-  rotationOuterRadius: 5 * ARENA.scale * 1.5 + 1,
-  forceMinY: 1.8,
+  rotationOuterRadius: 5 * ARENA.scale * 1.5 + BUILD_SCALE,
+  forceMinY: ARENA.floorTop + 0.88,
   height: ARENA.height,
   spin: 11,
   inwardPull: 1.05,
   edgeContainment: 2.94,
   lift: 2.25,
   desktopLift: 0.8,
-  mobileLift: 0.35,
+  mobileLift: 0.8,
   zones: [
     { id: 'broad', center: scalePoint({ x: 15.797340393066406, y: 0, z: 16.450000762939453 }),
       size: scalePoint({ x: 15, y: 12, z: 14.899999618530273 }), lift: 10 },

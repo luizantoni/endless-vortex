@@ -86,7 +86,6 @@ export function pushImpulse(run: Attempt, velocityY: number): number {
   if (impulse < 0) run.pushReadyAt = run.elapsed + T.platforms.pushCooldown
   return impulse
 }
-export function medalsFor(seconds: number): boolean[] { return T.medals.map(threshold => seconds >= threshold) }
 export function milliseconds(seconds: number): number { return Math.max(0, Math.floor(seconds * 1000 + 1e-6)) }
 
 // Observed-velocity correction via supported one-shot impulses; no direct avatar Transform writes.

@@ -8,6 +8,7 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   new Function('exports',ts.transpileModule(fs.readFileSync('src/flight-ranks.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(rankMod.exports)
   const imports = {
  './flight-ranks':rankMod.exports,
+ './orb-reward':{ORB_REWARD:{every:5}},
  '@dcl/sdk/react-ecs': { __esModule: true, default: react, UiEntity: 'entity', ReactEcsRenderer: {
       setUiRenderer: (f, options) => { render = f; rendererOptions = options }
     } },
@@ -23,12 +24,17 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   }).outputText
   const mod = { exports: {} }
   new Function('require','module','exports',code)(name => imports[name],mod,mod.exports)
-  const { display, setupAirtimeUi } = mod.exports
-  setupAirtimeUi()
+  const { display, setupAirtimeUi, resultUsesGoldTheme } = mod.exports
+  assert.equal(resultUsesGoldTheme({record:false,valid:true,provisional:true,recordKnown:false}),true,
+    'a first score awaiting the server uses the blue and gold pending treatment')
+  assert.equal(resultUsesGoldTheme({record:false,valid:true,provisional:true,recordKnown:true}),false)
+  assert.equal(resultUsesGoldTheme({record:true,valid:true}),true)
+  let rankSounds=0,recordSounds=0
+  setupAirtimeUi({onRank:()=>rankSounds++,onNewRecord:()=>recordSounds++})
   assert.deepEqual(rendererOptions, { virtualWidth: 0, virtualHeight: 0, screenInset: 'none' },
     'pixel-positioned HUD opts out of SDK scaling and applies insets once')
   display.orbs = 3
-  display.best = '12.50'; display.state = 'Finished · floor pad · move to restart'
+  display.bestLoaded=true; display.best = '12.50'; display.state = 'Finished · floor pad · move to restart'
   display.rows = Array.from({length:5},(_,i)=>({rank:i+1,userId:'avatar'+i,name:'Runner',airtime:'12480.000s'}))
   const walk = node => [node,...node.children.flatMap(walk)]
   const find = (node,key)=>walk(node).find(n=>n.props.key===key)
@@ -78,15 +84,22 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
     assert.ok(Math.abs(orb.props.uiTransform.position.left+orb.props.uiTransform.width/2-width/2)<.01,'orbs stay top-center')
     for (const [parent,key] of [[panel,'hud-airtime'],[orb,'hud-orbs-title']]) {
       const title=find(parent,key).props.uiTransform, p=parent.props.uiTransform
-      assert.ok(Math.abs(title.position.top+title.height*.30)<.001,'title overhang is exactly thirty percent')
+      if(key==='hud-airtime')assert.ok(Math.abs(title.position.top+title.height*.30)<.001,'airtime title overhang is exactly thirty percent')
+      else {
+        assert.ok(Math.abs(title.position.top+title.height*.3)<.001,'sphere title extends above the panel')
+        assert.ok(title.width>p.width,'sphere title is wider than the panel')
+      }
       assert.ok(Math.abs(title.position.left+title.width/2-p.width/2)<.001,'title is horizontally centered')
       assert.ok(p.position.top+title.position.top>=0,'title overhang remains on screen')
     }
     const orbTitle=find(orb,'hud-orbs-title').props.uiTransform
     assert.ok(orb.props.uiTransform.position.top+orbTitle.position.top<height*.08)
-    const orbValue=find(orb,'orb-progress-value').props.uiTransform
-    assert.ok(orbValue.position.top>=orbTitle.position.top+orbTitle.height,'count stays below title')
-    assert.ok(orbValue.position.top+orbValue.height<=find(orb,'orb-tick-0').props.uiTransform.position.top,'count clears progress orbs')
+    assert.equal(find(orb,'orb-progress-value'),undefined,'orb panel has no numeric counter')
+    const firstOrb=find(orb,'orb-tick-0').props.uiTransform,secondOrb=find(orb,'orb-tick-1').props.uiTransform
+    assert.ok(firstOrb.position.left+firstOrb.width>secondOrb.position.left,'orb icons overlap')
+    assert.equal(walk(orb).filter(n=>String(n.props.key||'').startsWith('orb-tick-')).length,5)
+    if(width>=1000)assert.equal(firstOrb.width,48,'desktop spheres are larger')
+    assert.ok(firstOrb.position.top>=orbTitle.position.top+orbTitle.height,'icons clear the new title')
     assert.ok(guide.props.uiTransform.position.top>find(panel,'hud-nearby').props.uiTransform.position.top,'guide follows nearby players')
     assert.ok(guide.props.uiTransform.position.top+44<=panel.props.uiTransform.height)
     assert.ok(panel.props.uiTransform.position.top+guide.props.uiTransform.position.top+44<=height*.75,'interactive content keeps lower corners clear')
@@ -99,22 +112,23 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
     assert.ok(panel.props.uiTransform.position.left+logo.position.left>=0 && panel.props.uiTransform.position.left+logo.position.left+logo.width<=width,'enlarged footer stays within screen width')
     assert.ok(Math.abs(logo.width/logo.height-2145/733)<.01,'logo keeps its original proportions')
     assert.ok(Math.abs(logo.position.left+logo.width/2-panel.props.uiTransform.width/2)<.01,'footer logo is centered')
-    assert.ok(find(panel,'hud-medals').props.uiTransform.position.top>find(panel,'live-timer').props.uiTransform.position.top)
-    assert.ok(find(panel,'hud-nearby').props.uiTransform.position.top>find(panel,'hud-medals').props.uiTransform.position.top)
+    assert.equal(find(panel,'hud-medals'),undefined)
+    assert.ok(find(panel,'hud-nearby').props.uiTransform.position.top>find(panel,'live-timer').props.uiTransform.position.top)
     assert.ok(walk(panel).some(n=>n.props.uiBackground?.texture?.src.endsWith('/heading-airtime-special.png')))
-    for(const word of ['medals','nearby'])assert.ok(walk(panel).some(n=>n.props.uiBackground?.texture?.src.endsWith('/heading-'+word+'-light.png')))
-    assert.ok(walk(orb).some(n=>n.props.uiBackground?.texture?.src.endsWith('/heading-orbs-special.png')))
+    for(const word of ['nearby'])assert.ok(walk(panel).some(n=>n.props.uiBackground?.texture?.src.endsWith('/heading-'+word+'-light.png')))
+    assert.ok(walk(orb).some(n=>n.props.uiBackground?.texture?.src.endsWith('/heading-teleporting-spheres.png')))
     const guidePlate=guide.children[0].props.uiTransform
     assert.equal(guidePlate.width,guide.props.uiTransform.width*.575,'guide artwork is fifteen percent larger than the half-size version')
     assert.ok(Math.abs(guidePlate.height-25.3)<.001,'guide artwork height increases by fifteen percent')
     assert.equal(guide.props.uiTransform.height,44,'the tap target remains usable')
-    for(const tier of ['bronze','silver','gold'])assert.ok(walk(panel).some(n=>n.props.uiBackground?.texture?.src.includes('/medal-'+tier+'-')))
     for(const row of walk(panel).filter(n=>String(n.props.key||'').startsWith('leader-'))) {
       const id=row.props.key.slice(7), portrait=find(row,'portrait-'+id), score=find(row,'score-'+id)
       const insignia=find(row,'rank-insignia-'+id), name=find(row,'player-name-'+id)
       assert.ok(insignia.props.uiBackground.texture.src.endsWith('/rank-10.png'),'nearby insignia follows airtime tier rather than list position')
       const crest=insignia.props.uiTransform, n=name.props.uiTransform
-      assert.ok(crest.width>=80 && crest.height>=40,'rank insignia is large enough to recognize')
+      assert.ok(crest.width>=48 && crest.width<=64,'rank insignia stays proportional to the avatar')
+      assert.equal(n.position.left,score.props.uiTransform.position.left,'name and score share a left edge')
+      assert.ok(portrait.props.uiTransform.position.top+portrait.props.uiTransform.height<=crest.position.top,'rank sits below the avatar')
       const clears=(a,b)=>a.position.left+a.width<=b.position.left || b.position.left+b.width<=a.position.left || a.position.top+a.height<=b.position.top || b.position.top+b.height<=a.position.top
       assert.ok(clears(crest,n),'insignia clears the username')
       assert.ok(clears(crest,score.props.uiTransform),'insignia clears the score')
@@ -125,15 +139,8 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
       assert.ok(walk(score).some(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-blue.png')))
     }
     assert.ok(walk(guide).some(n=>n.props.uiBackground?.texture?.src.endsWith('/flight-guide-light.png')))
-    const orbDigits=walk(find(orb,'orb-progress-value')).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-gold.png'))
-    assert.equal(orbDigits.length,4,'orb total uses gold sprite digits and a slash')
-    assert.equal(orbDigits[0].props.uiBackground.uvs[0],3/6,'orb count is still accurate')
-    assert.equal(walk(orb).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/orb-icon.png')).length,3)
-    assert.equal(walk(orb).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/orb-empty.png')).length,7)
-    for(const caption of walk(find(panel,'hud-medals')).filter(n=>String(n.props.key||'').startsWith('medal-threshold-'))) {
-      assert.ok(!walk(caption).some(n=>n.props.uiText),'medal numbers and the seconds suffix have no SDK text to ghost')
-      assert.equal(walk(caption).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-blue.png')).length,3)
-    }
+    assert.equal(walk(orb).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/modular/vortex.png') && n.props.uiTransform.opacity===1).length,3)
+    assert.equal(walk(orb).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/orb-slot-empty.png')).length,2)
     assert.ok(walk(panel).some(n=>n.props.uiText?.value==='BEST'))
     const bestDigits=walk(find(panel,'best-time-digits')).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-blue.png'))
     assert.equal(bestDigits.length,8,'best time uses blue sprites for every digit and separator')
@@ -162,22 +169,11 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   assert.equal(mod.exports.formatAirtime('59.999'),'01:00.00','centisecond carry is normalized')
   assert.equal(mod.exports.formatAirtime('78.24'),'01:18.24')
   assert.equal(mod.exports.formatAirtime('78.24',false),'01:18')
-  display.medals='✓ Bronze · ✓ Silver · ○ Gold';update(.06)
-  const medalSources=walk(render()).map(n=>n.props.uiBackground?.texture?.src||'')
-  assert.ok(medalSources.some(src=>src.endsWith('/medal-bronze-earned.png')))
-  assert.ok(medalSources.some(src=>src.endsWith('/medal-silver-earned.png')))
-  assert.ok(medalSources.some(src=>src.endsWith('/medal-gold-locked.png')))
-  const thresholds=walk(find(render(),'hud-medals')).filter(n=>String(n.props.key||'').startsWith('medal-threshold-'))
-  assert.equal(thresholds.length,3)
-  for(const caption of thresholds) {
-    const digits=walk(caption).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-blue.png'))
-    assert.equal(digits.length,3)
-    assert.ok(Math.abs(digits[2].props.uiBackground.uvs[1])<1e-10,'seconds suffix comes from the third sprite row')
-  }
+  assert.ok(!walk(render()).some(n=>/medal/.test(n.props.uiBackground?.texture?.src||'')),'no medal assets are rendered')
   display.orbs=17;update(.06)
-  assert.equal(walk(find(render(),'hud-orbs')).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/orb-icon.png')).length,10,'orb progress is capped at ten')
+  assert.equal(walk(find(render(),'hud-orbs')).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/modular/vortex.png') && n.props.uiTransform.opacity===1).length,5,'orb progress is capped at five')
   display.orbs=-2;update(.06)
-  assert.equal(walk(find(render(),'hud-orbs')).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/orb-icon.png')).length,0)
+  assert.equal(walk(find(render(),'hud-orbs')).filter(n=>n.props.uiBackground?.texture?.src.endsWith('/modular/vortex.png') && n.props.uiTransform.opacity===1).length,0)
   display.orbs=3;update(.06)
   const hasVignette = () => walk(render()).some(n =>
     n.props.uiBackground?.texture?.src.endsWith('/low-altitude-vignette.png'))
@@ -196,48 +192,125 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   const portraitDigitUvs = () => walk(find(render(),'live-timer')).filter(n =>
     n.props.uiBackground?.texture?.src.endsWith('/digits-blue.png')).map(n => n.props.uiBackground.uvs)
   const mobileDigits = portraitDigitUvs()
-  assert.ok(walk(find(render(),'orb-progress-value')).some(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-gold.png')))
+  assert.equal(find(render(),'orb-progress-value'),undefined)
   assert.equal(mobileDigits.length, 8, 'portrait mobile shows the live timer digits')
   display.time = '13.34'; update(.06)
   assert.notDeepEqual(portraitDigitUvs(), mobileDigits, 'the timer updates as airtime advances')
   assert.ok(walk(render()).some(n => n.props.uiText?.value === 'AIRBORNE'))
   size = { width: 844, height: 390 }
-  display.state='Airborne'; display.time='30.000'; update(.06)
-  const hasBurst=()=>walk(render()).some(n=>n.props.uiBackground?.texture?.src.endsWith('/burst.png'))
-  assert.equal(hasBurst(),true)
-  for(let i=0;i<20;i++) update(.06)
-  assert.equal(hasBurst(),false,'burst terminates without continuous particle work')
-  display.time='0.000'; update(.06); display.time='30.000'; update(.06)
-  assert.equal(hasBurst(),true,'replay rearms the milestone')
-  update(1); assert.equal(hasBurst(),false,'suspension clears the cached burst immediately')
-  display.state='Airborne'; display.time='100.000'; update(.06)
-  const findBanner = node => {
-    if (node.children.some(child => child.props.uiText?.value === '100 SECONDS AIRBORNE!')) return node
-    for (const child of node.children) { const found = findBanner(child); if (found) return found }
+  for(const seconds of [15,30,60,99]){
+    display.time=String(seconds);update(.06)
+    assert.equal(find(render(),'rank-achievement'),undefined,'removed medal thresholds produce no popup')
   }
-  const banner = () => findBanner(render())
-  assert.ok(banner(),'100 seconds triggers an exact-text center award')
-  const start = banner().props.uiTransform.position
-  for(let i=0;i<20;i++) update(.06)
-  const moving = banner().props.uiTransform.position
-  const slot = find(render(),'hud-milestone-slot').props.uiTransform.position
-  const distance = p => Math.hypot(p.left-slot.left,p.top-slot.top)
-  assert.ok(distance(moving)<distance(start),'award travels toward the slot below the orb card')
-  for(let i=0;i<20;i++) update(.06)
-  assert.ok(!walk(render()).some(n=>n.props.uiBackground?.texture?.src.endsWith('/milestone-100.png')),
-    'the milestone award fades instead of leaving a fixed badge behind')
-  display.time='0.000'; update(.06)
-  assert.ok(!walk(render()).some(n=>n.props.uiBackground?.texture?.src.endsWith('/streak.png')),
-    'the obsolete fixed red streak plate is removed completely')
-  display.time='0.000'; display.rewardCelebration++; update(.06)
-  const celebration = () => walk(render()).filter(n=>n.props.key!=='hud-footer-logo')
-  assert.ok(celebration().some(n=>n.props.uiBackground?.texture?.src.endsWith('/endless-vortex-logo.png')),
-    'successful orb reward celebrates with the Endless Vortex logo')
-  assert.ok(!celebration().some(n=>n.props.uiText?.value === 'ASCENSION!'),
-    'the logo replaces the congratulatory subtitle')
-  assert.equal(celebration().filter(n=>['✦','✧','•'].includes(n.props.uiText?.value)).length, 56,
-    'the screen burst uses a fixed pool of 56 UI particles')
-  for(let i=0;i<80;i++) update(.06)
-  assert.ok(!celebration().some(n=>n.props.uiBackground?.texture?.src.endsWith('/endless-vortex-logo.png')),
-    'slow-motion logo celebration fades away after its longer duration')
+  display.time='100.000';update(.06)
+  assert.ok(find(render(),'rank-achievement'),'100 seconds triggers the matching rank')
+  update(.12);assert.ok(find(render(),'rank-achievement'))
+  for(let i=0;i<20;i++)update(.1)
+  assert.equal(find(render(),'rank-achievement'),undefined,'rank award expires after two seconds')
+  display.time='0.000';display.rewardTransition=true;update(.06)
+  assert.equal(render().props.key,'reward-cinematic','reward camera has a clear screen')
+  assert.equal(walk(render()).filter(n=>n.props.uiText || n.props.uiBackground).length,0,'no orb, number or HUD obscures the avatar')
+  display.rewardTransition=false;update(.06)
+  assert.ok(find(render(),'hud-orbs'),'HUD returns after the cinematic')
+  const assertPlain = popup => {
+    assert.ok(popup)
+    assert.ok(!walk(popup).some(n=>n.props.uiBackground?.color || /frame|vignette/.test(n.props.uiBackground?.texture?.src||'')),
+      'popups have no colored backgrounds or border artwork')
+  }
+  display.result={id:1,milliseconds:23456,record:false,valid:true,saved:true}
+  for(const [width,height] of [[1280,720],[390,844],[568,320]]){
+    size={width,height};display.result={...display.result,id:display.result.id+1};update(.06)
+    const popup=find(render(),'flight-result'),bounds=popup.props.uiTransform
+    for(const node of walk(popup)){const src=node.props.uiBackground?.texture?.src;if(src)assert.ok(fs.existsSync(src),'every result image is packaged')}
+    assert.ok(bounds.position.left>=0 && bounds.position.top>=0 && bounds.position.left+bounds.width<=width && bounds.position.top+bounds.height<=height)
+    assert.ok(walk(find(popup,'result-score')).some(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-red.png')))
+    assert.equal(find(popup,'result-title').props.uiBackground.texture.src,'assets/ui/tutorial/heading-flight-result-red.png')
+    assertPlain(popup)
+    assert.equal(find(popup,'result-save'),undefined)
+    assert.equal(find(popup,'result-retry'),undefined)
+  }
+  display.result={id:20,milliseconds:45678,record:true,valid:true,saved:false};update(.2)
+  const recordPopup=find(render(),'flight-result')
+  assert.equal(find(recordPopup,'result-title').props.uiBackground.texture.src,'assets/ui/tutorial/heading-flight-result-gold.png')
+  assert.ok(walk(find(recordPopup,'result-score')).some(n=>n.props.uiBackground?.texture?.src.endsWith('/digits-blue.png')))
+  assertPlain(recordPopup)
+  assert.equal(find(recordPopup,'result-save'),undefined)
+  display.result=undefined;display.flightStarted++;display.time='0.000';update(.06)
+  assert.ok(find(render(),'flight-result'),'instant takeoff cannot swallow the central result')
+  assert.ok(find(render(),'takeoff-vignette'))
+  assert.ok(find(render(),'timer-reset-old'))
+  assert.ok(find(render(),'timer-reset-glow'))
+  assert.equal(find(render(),'live-timer').props.uiTransform.overflow,'hidden','animated digits stay within their counter')
+  update(.15);assert.ok(find(render(),'timer-current-digits').props.uiTransform.opacity>0)
+  assert.ok(find(render(),'flight-result'),'flight result remains visible after takeoff during its two-second window')
+  assert.equal(display.time,'0.000','animation never modifies the actual score')
+  for(let i=0;i<15;i++)update(.06)
+  assert.equal(find(render(),'timer-reset-glow'),undefined)
+  assert.equal(find(render(),'timer-reset-old'),undefined)
+  assert.equal(find(render(),'takeoff-vignette'),undefined)
+  assert.equal(find(render(),'timer-current-digits').props.uiTransform.opacity,1)
+  update(.1);assert.equal(find(render(),'timer-reset-glow'),undefined,'normal airborne packets do not restart the effect')
+  for(let i=0;i<60;i++)update(.06)
+  assert.equal(find(render(),'flight-result'),undefined,'the result popup exits after its readable presentation window')
+  display.state='Airborne';display.time='0.000';update(.1)
+  const ranksBefore=rankSounds
+  for(let tier=1;tier<=10;tier++){
+    display.state='Airborne';display.time=String(tier*100);update(.1)
+    const card=find(render(),'rank-achievement'),bounds=card.props.uiTransform
+    assert.ok(Math.abs(bounds.position.left+bounds.width/2-size.width/2)<.01)
+    assert.ok(Math.abs(bounds.position.top+bounds.height/2-size.height/2)<.01)
+    assertPlain(card)
+    assert.equal(find(card,'rank-achievement-emblem').props.uiBackground.texture.src,`assets/ui/ranks/rank-${tier}.png`)
+    const splash=walk(card).filter(n=>String(n.props.key||'').startsWith('rank-splash-'))
+    assert.equal(splash.length,28)
+    assert.ok(splash.every(n=>n.props.uiBackground.texture.src===`assets/ui/ranks/rank-${tier}-orb.png`))
+    assert.deepEqual(walk(card).filter(n=>n.props.uiText),[],'rank popup is artwork only')
+    for(const node of walk(card)){const src=node.props.uiBackground?.texture?.src;if(src)assert.ok(fs.existsSync(src))}
+    update(.12);assert.ok(find(render(),'rank-achievement'))
+    for(let i=0;i<22;i++)update(.1)
+    assert.equal(find(render(),'rank-achievement'),undefined)
+  }
+  assert.equal(rankSounds-ranksBefore,10,'one achievement sound per earned rank')
+  display.time='1100';update(.1)
+  assert.equal(rankSounds-ranksBefore,10,'max rank does not repeat at later hundreds')
+  display.flightStarted++;display.time='0';update(.1);display.time='100';update(.1)
+  assert.ok(find(render(),'rank-achievement'),'new runs can earn their ranks again')
+
+  display.flightStarted++;display.time='0';update(.1);display.rewardTransition=true
+  const soundsBeforeCut=rankSounds
+  display.time='300';update(.1)
+  assert.equal(rankSounds,soundsBeforeCut,'rank sounds wait until their popup can be shown')
+  display.rewardTransition=false;update(.1)
+  assert.equal(find(render(),'rank-achievement-emblem').props.uiBackground.texture.src,'assets/ui/ranks/rank-3.png','network jumps show the newest rank')
+  assert.equal(rankSounds,soundsBeforeCut+1)
+
+  const recordsBefore=recordSounds
+  display.state='Finished · floor pad';display.resultEvent={id:90,milliseconds:60000,record:true,valid:true,saved:true};update(.1)
+  assert.equal(find(render(),'rank-achievement'),undefined)
+  assert.equal(recordSounds,recordsBefore+1)
+  display.resultEvent={...display.resultEvent,id:91,presentationId:90,saved:false};update(.1)
+  display.resultEvent={...display.resultEvent,saved:true};update(.1)
+  assert.equal(recordSounds,recordsBefore+1,'server reconciliation and save updates never replay record audio')
+  for(let i=0;i<22;i++)update(.1)
+  assert.equal(find(render(),'flight-result'),undefined)
+  assert.equal(find(render(),'rank-achievement'),undefined,'queued ranks do not resume after the final score')
+  for(let i=0;i<25;i++)update(.1)
+  assert.equal(find(render(),'rank-achievement'),undefined,'finished scores do not enqueue ranks again')
+  const opacity=mod.exports.popupOpacity
+  assert.equal(opacity(0),0)
+  assert.ok(opacity(.1)>0 && opacity(.1)<1,'fade in is gradual')
+  assert.equal(opacity(.3),1)
+  assert.equal(opacity(1.5),1)
+  assert.ok(opacity(1.85)>0 && opacity(1.85)<1,'fade out is gradual')
+  assert.equal(opacity(2),0)
+  const resultSample={id:91,milliseconds:60000,record:true,valid:true,saved:true}
+  for(const age of [.1,.5,1.85]) {
+    assert.equal(mod.exports.flightResultOverlay(1280,720,resultSample,age).props.uiTransform.opacity,opacity(age))
+    assert.equal(mod.exports.rankAchievementOverlay(1280,720,1,age).props.uiTransform.opacity,opacity(age))
+  }
+
+  find(render(),'reopen').props.onMouseDown();update(.1)
+  display.resultEvent={id:99,milliseconds:12345,record:false,valid:true,saved:false,provisional:true};update(.1)
+  assert.ok(find(render(),'flight-result'),'the central result is visible even when the flight guide is open')
+
 })

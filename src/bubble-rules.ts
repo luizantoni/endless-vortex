@@ -1,20 +1,21 @@
-import { ARENA, Point } from './arena'
+import { ORB_REWARD } from './orb-reward'
+import { ARENA, BUILD_SCALE, Point } from './arena'
 
 export const BUBBLES = {
-  count: 24, radius: 0.48, orbOpacity: 0.72, contactRadius: 1.6, capsuleHalfHeight: 0.5, maxSweep: 4, spawnClearance: 1.8,
+  count: 24, radius: 0.48 * BUILD_SCALE, orbOpacity: 0.72, contactRadius: 1.6 * BUILD_SCALE, capsuleHalfHeight: 0.5, maxSweep: 4, spawnClearance: 1.8 * BUILD_SCALE,
   vortexScale: 1.6, vortexEmission: 3.2, glowBaseIntensity: 2.6, glowScanIntensity: 1.8,
-  orbitDegrees: 10, spinDegrees: 110, vortexSpinDegrees: 64, respawn: 5, lifetime: 24, popDuration: 0.28,
-  glowUpdateInterval: 1 / 12, particleCount: 128, particlesPerPop: 48, particleLifetime: 3.2,
-  accumulationEvery: 10, accumulationPerPop: 6, accumulationCapacity: 60,
-  accumulationTravel: 1.6, accumulationRadius: 3.2, accumulationSpin: 2.1,
-  rewardExplosionLifetime: 2, rewardExplosionExpand: 0.42, rewardExplosionMinRadius: 2.4,
-  rewardExplosionMaxRadius: 20, rewardExplosionCenterHeight: 22.5, rewardExplosionHeightRange: 14,
+  orbitDegrees: 10, spinDegrees: 110, vortexSpinDegrees: 64, respawn: 5, popDuration: 0.28,
+  glowUpdateInterval: 1 / 12, particleCount: 192, particlesPerPop: 64, particleLifetime: 3.2,
+  accumulationEvery: ORB_REWARD.every, accumulationPerPop: 12, accumulationCapacity: 60,
+  accumulationTravel: 1.6, accumulationRadius: 3.2 * BUILD_SCALE, accumulationSpin: 2.1,
+  rewardExplosionLifetime: 3.2, rewardExplosionExpand: 0.55, rewardExplosionMinRadius: 1.4 * BUILD_SCALE,
+  rewardExplosionMaxRadius: 8 * BUILD_SCALE, rewardExplosionCenterHeight: 27 * BUILD_SCALE, rewardExplosionHeightRange: 5 * BUILD_SCALE,
   rewardExplosionSpin: 3.6,
-  particleMaterialInterval: 0.3, particleBurstDuration: 0.65, particleBurstSpeedMin: 6, particleBurstSpeedMax: 12,
-  particleRadialSpeedMin: 6.5, particleRadialSpeedMax: 11.5,
+  particleMaterialInterval: 0.3, particleBurstDuration: 0.65, particleBurstSpeedMin: 6 * BUILD_SCALE, particleBurstSpeedMax: 12 * BUILD_SCALE,
+  particleRadialSpeedMin: 6.5 * BUILD_SCALE, particleRadialSpeedMax: 11.5 * BUILD_SCALE,
   particleSpinMin: 0.6, particleSpinMax: 1.4,
   desktopImpulse: 1.2, mobileImpulse: 0.7, maxUp: 3, cooldown: 0.8,
-  sound: 'assets/sounds/hit3.mp3', volume: 0.5, soundInterval: 0.12
+  sound: 'assets/sounds/goldenorbspickup.mp3', volume: 0.5, soundInterval: 0.12
 } as const
 
 // Golden motes spiral inward, then keep orbiting the vortex axis until the reward.
@@ -72,6 +73,16 @@ export function goldenVortexParticlePoint(origin: Point, burstAngle: number, bur
     y: burstEnd.y + riseSpeed * travel + Math.sin(age * 8 + phase) * 0.12,
     z: ARENA.center.z + Math.sin(orbitAngle) * orbitRadius
   }
+}
+
+// A tight rising helix around the actual avatar, including across the reward teleport.
+export function goldenPlayerWrapPoint(player: Point, index: number, age: number): Point {
+  const strand = index % 3, progress = Math.floor(index / 3) / (Math.ceil(BUBBLES.particleCount / 3) - 1)
+  const angle = progress * Math.PI * 4 + strand * Math.PI * 2 / 3 + age * 3
+  const radius = .65 + .28 * Math.sin(progress * Math.PI) + .07 * Math.sin(age * 4 + index)
+  return { x: player.x + Math.cos(angle) * radius,
+    y: player.y - .3 + progress * 2.5 + Math.sin(age * 3 + index) * .08,
+    z: player.z + Math.sin(angle) * radius }
 }
 
 // Closest approach of the moving bubble to the avatar's vertical capsule.

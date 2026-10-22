@@ -1,4 +1,4 @@
-const { TUNING } = require('../src/tuning.ts') // Node 24 type stripping; one set of medal thresholds.
+const { flightRankTier } = require('../src/flight-ranks.ts')
 function dayKey(now) { return new Date(now).toISOString().slice(0, 10) }
 function weekKey(now) {
   const date = new Date(now)
@@ -20,10 +20,9 @@ function validateResult(value, now) {
 }
 function applyResult(db, result, now) {
   let player = db.players.find(item => item.userId === result.userId)
-  if (!player) { player = { userId: result.userId, name: result.name, bestMs: 0, medals: [false, false, false] }; db.players.push(player) }
+  if (!player) { player = { userId: result.userId, name: result.name, bestMs: 0 }; db.players.push(player) }
   player.name = result.name
   player.bestMs = Math.max(player.bestMs, result.airtimeMs)
-  player.medals = TUNING.medals.map((seconds, i) => player.medals[i] || result.airtimeMs >= seconds * 1000)
   const week = weekKey(result.finishedAt)
   let table = db.weeks.find(item => item.week === week)
   if (!table) { table = { week, rows: [] }; db.weeks.push(table) }
@@ -42,7 +41,7 @@ function standings(db, now) {
 }
 function snapshot(db, userId, now) {
   const player = db.players.find(item => item.userId === userId)
-  return { bestMs: player?.bestMs || 0, medals: player?.medals || [false, false, false],
+  return { bestMs: player?.bestMs || 0, rankTier: flightRankTier((player?.bestMs || 0)/1000),
     week: weekKey(now), rows: standings(db, now), serverTime: now, verified: false }
 }
 module.exports = { dayKey, weekKey, emptyDb, validateResult, applyResult, standings, snapshot }

@@ -16,3 +16,11 @@ export function flightRankTier(airtime: number | string): number {
   const seconds = typeof airtime === 'number' ? airtime : Number.parseFloat(airtime)
   return Number.isFinite(seconds) ? Math.min(10, Math.floor(Math.max(0, seconds) / 100)) : 0
 }
+
+/** Light, metal and shadow colors shared by insignia and achievement orb splashes. */
+export const RANK_PALETTES = [
+  ['#d5e6ee','#6d8c9a','#243f52'],['#ffdda1','#c17c3b','#6c3617'],['#ffebba','#d38c3e','#793c18'],
+  ['#f6ffff','#92bed7','#355d82'],['#f5ffff','#abd8ed','#397eab'],['#e8ffff','#32d5ed','#0862a1'],
+  ['#fff8c7','#ffc23e','#98500d'],['#fffbd3','#ffcb4b','#aa4e12'],['#ffffff','#bcecff','#5385b7'],
+  ['#e7fff5','#56f0cf','#08757e'],['#fffde2','#ffe17b','#c48319']
+] as const

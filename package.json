@@ -1,7 +1,7 @@
 {
   "name": "dcl-project",
   "version": "1.0.0",
-  "description": "Endless Vortex \u2014 vortex gliding, airtime standings and temporary landing platforms",
+  "description": "Endless Vortex — vortex gliding, airtime standings and temporary landing platforms",
   "scripts": {
     "start": "sdk-commands start",
     "deploy": "sdk-commands deploy",
@@ -13,11 +13,17 @@
     "upgrade-sdk:next": "npm install --save-dev @dcl/sdk@next",
     "tutorial:assets": "node scripts/generate-tutorial-assets.cjs",
     "tutorial:preview": "node scripts/preview-tutorial.cjs",
-    "rank:assets": "node scripts/generate-rank-insignia.cjs"
+    "rank:assets": "node scripts/generate-rank-insignia.cjs",
+    "scene:fit": "node scripts/fit-orchard.cjs",
+    "server-logs": "sdk-commands sdk-server-logs",
+    "preview:records": "node scripts/preview-score-server.cjs",
+    "result:assets": "node scripts/generate-result-digits.cjs",
+    "flight:assets": "node scripts/generate-flight-effects.cjs",
+    "entry:assets": "node scripts/generate-vortex-entry-cues.cjs"
   },
   "devDependencies": {
-    "@dcl/js-runtime": "7.30.1",
-    "@dcl/sdk": "7.30.1",
+    "@dcl/js-runtime": "7.30.2-39321726891.commit-9926e63",
+    "@dcl/sdk": "7.30.2-39321726891.commit-9926e63",
     "@resvg/resvg-js": "^2.6.2"
   },
   "engines": {

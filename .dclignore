@@ -40,3 +40,5 @@ AGENTS.md
 assets/ui/tutorial/*.svg
 
 assets/ui/ranks/*.svg
+
+assets/models/orchard-source.glb

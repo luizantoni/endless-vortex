@@ -2,7 +2,7 @@ const fs=require('node:fs'),ts=require('typescript'),assert=require('node:assert
 const {test}=require('node:test'),{PNG}=require('pngjs')
 const mod={exports:{}}
 new Function('exports',ts.transpileModule(fs.readFileSync('src/flight-ranks.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(mod.exports)
-const {flightRankTier,FLIGHT_RANKS}=mod.exports
+const {flightRankTier,FLIGHT_RANKS,RANK_PALETTES}=mod.exports
 test('shared insignia progression preserves every hundred-second boundary and resets safely',()=>{
  assert.equal(FLIGHT_RANKS.length,11)
  for(let tier=1;tier<=10;tier++){
@@ -28,4 +28,18 @@ test('each rank supplies unique small artwork and a matching transparent avatar 
   for(let i=0;i<plate.width*plate.height;i++)assert.equal(mask.data[i*4],plate.data[i*4+3],'explicit alpha follows the plate artwork')
  }
  assert.equal(unique.size,11)
+})
+
+test('every rank splash uses its insignia metal palette and a transparent miniature sphere',()=>{
+ const distinct=new Set()
+ for(let tier=0;tier<FLIGHT_RANKS.length;tier++){
+   const base=`assets/ui/ranks/rank-${tier}-orb`,svg=fs.readFileSync(base+'.svg','utf8')
+   for(const color of RANK_PALETTES[tier])assert.ok(svg.includes(color))
+   const bytes=fs.readFileSync(base+'.png'),png=PNG.sync.read(bytes);distinct.add(bytes.toString('base64'))
+   assert.equal(png.width,64);assert.equal(png.height,64)
+   assert.equal(png.data[3],0,'orb sprite has transparent corners')
+   assert.equal(png.data[(32*64+32)*4+3],255,'sphere center is visible')
+ }
+ assert.equal(distinct.size,FLIGHT_RANKS.length)
+ assert.ok(fs.statSync('assets/sounds/achievement-rank.mp3').size>0)
 })

@@ -1,13 +1,13 @@
 import { ColliderLayer, engine, Entity, GltfContainer, GltfNodeModifiers, Material, Transform } from '@dcl/sdk/ecs'
 import { Color3, Color4, Quaternion, Vector2, Vector3 } from '@dcl/sdk/math'
-import { ARENA } from './arena'
+import { ARENA, BUILD_SCALE, GROUND_ASSET_LIFT } from './arena'
 import { TUNING } from './tuning'
 
 const ORIGINAL_MODEL = 'assets/models/blue-lava-vortex.glb'
 const BASE_MODEL = 'assets/models/blue-lava-vortex-base.glb'
 const LAVA_MODEL = 'assets/models/blue-lava-vortex-lava.glb'
 const LAVA_TEXTURE = 'assets/materials/blue-lava-molten.png'
-const VORTEX_SCALE = TUNING.blueLavaVortex.scale
+const VORTEX_SCALE = TUNING.blueLavaVortex.scale * BUILD_SCALE
 
 function getModelEntity(src: string): Entity {
   const existing = [...engine.getEntitiesWith(GltfContainer)].find(([, model]) => model.src === src)?.[0]
@@ -46,7 +46,7 @@ export function createBlueLavaVortex() {
     GltfNodeModifiers.deleteFrom(entity)
   }
 
-  const position = { x: ARENA.center.x, y: TUNING.blueLavaVortex.y, z: ARENA.center.z }
+  const position = { x: ARENA.center.x, y: TUNING.blueLavaVortex.y * BUILD_SCALE + GROUND_ASSET_LIFT, z: ARENA.center.z }
   const base = getModelEntity(BASE_MODEL)
   Transform.createOrReplace(base, { position, rotation: Quaternion.Identity(),
     scale: Vector3.create(VORTEX_SCALE, VORTEX_SCALE, VORTEX_SCALE) })

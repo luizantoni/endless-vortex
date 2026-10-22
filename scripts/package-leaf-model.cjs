@@ -20,6 +20,12 @@ const scale = node.scale || [1, 1, 1]
 // Recenter the node pivot without changing mesh vertices, scale, or aspect ratio.
 node.translation = [0, 1, 2].map(axis => -((min[axis] + max[axis]) / 2) * scale[axis])
 
+// Preserve the authored colors/textures while giving rotating leaves a subtle self-lit tint.
+for (const material of json.materials || []) {
+  const base = material.pbrMetallicRoughness?.baseColorFactor || [0.15, 0.55, 0.25, 1]
+  material.emissiveFactor = base.slice(0, 3).map(value => value * 0.22)
+}
+
 const rawJson = Buffer.from(JSON.stringify(json))
 const paddedLength = (rawJson.length + 3) & ~3
 const jsonChunk = Buffer.alloc(paddedLength, 0x20)

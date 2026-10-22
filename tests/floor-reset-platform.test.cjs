@@ -33,7 +33,7 @@ test('the 0.01 cm floor trigger has no solid collider and only latches local-pla
     assert.equal(triggers.get(entity), 4)
     assert.equal(triggers.get('eventEntity'), entity)
     const plane = ARENA.floorTop + FLOOR_RESET_PLATFORM.surfaceOffset
-    const crossing = (feetBefore, feetAfter, x = 24, z = 24) => crossedLocalPlayerResetPlane(
+    const crossing = (feetBefore, feetAfter, x = ARENA.center.x, z = ARENA.center.z) => crossedLocalPlayerResetPlane(
       { x, y: feetBefore + 0.88, z }, { x, y: feetAfter + 0.88, z }, 0.88)
     assert.equal(crossing(plane + 0.1, plane), true,
       'the local feet crossing the exact plane ends the attempt if mobile misses its trigger event')
@@ -43,7 +43,7 @@ test('the 0.01 cm floor trigger has no solid collider and only latches local-pla
       'being below the plane without crossing does not repeatedly reset')
     assert.equal(crossing(plane - 0.1, plane + 0.1), false,
       'rising away from the floor does not reset')
-    assert.equal(crossing(plane + 0.1, plane, 50, 50), false,
+    assert.equal(crossing(plane + 0.1, plane, ARENA.size + 2, ARENA.size + 2), false,
       'a plane crossing outside the arena cannot end the attempt')
     assert.equal(consumeContact(), false)
     onEnter({ trigger: { entity: player + 1 } })

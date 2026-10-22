@@ -1,89 +1,61 @@
 export type AirSample = {
   dt: number; wallDt: number; now: number; inside: boolean; connected: boolean
   floor: boolean; supported: boolean; moved: boolean; teleported: boolean
-  focused?: boolean
+  focused?: boolean; airborne?: boolean
 }
+export type FlightResult = { milliseconds: number; day: string; finishedAt: number; valid: boolean }
 
-// Local observed time only. No scores, frame-count timer or wall-clock catch-up.
+/** A landing finishes exactly once. The completed score stays frozen until confirmed takeoff. */
 export class Airtime {
   phase: 'ready' | 'airborne' | 'paused' | 'finished' = 'ready'
   seconds = 0
   day = ''
   reason = 'Jump into the wind'
-  private armed = true
-
+  result: FlightResult | undefined
+  private takeoff = 0
+  private needsLanding = false
   update(s: AirSample): boolean {
     const running = this.phase === 'airborne' || this.phase === 'paused'
-    if (!s.connected || s.teleported || !Number.isFinite(s.dt) || !Number.isFinite(s.wallDt) ||
-        s.dt <= 0 || s.wallDt < 0 || s.dt > 0.5 || s.wallDt > 0.5) {
-      // A client may not expose the player transform immediately, and mobile clients can
-      // deliver a long first frame while loading. Those gaps happen before an attempt and
-      // must not disarm it; only interrupt an attempt that has actually started.
-      if (running) {
-        this.armed = false
-        this.phase = 'finished'
-        this.reason = 'Interrupted · touch floor pad to reset'
-        return true
-      }
-      return false
+    const gap = !Number.isFinite(s.dt) || !Number.isFinite(s.wallDt) || s.dt <= 0 || s.wallDt < 0 || s.dt > .5 || s.wallDt > .5
+    if (!s.connected || s.teleported || gap) {
+      this.takeoff = 0
+      if (!running) return false
+      this.phase = 'finished'; this.needsLanding = true
+      this.reason = 'Interrupted · land to retry'
+      this.result = { milliseconds: this.milliseconds, day: this.day, finishedAt: s.now, valid: false }
+      return true
     }
     if (s.floor) {
-      if (running) {
-        this.phase = 'finished'
-        this.seconds = 0
-        this.armed = true
-        this.reason = 'Finished · floor pad · move to restart'
-        return true
-      }
-      if (this.phase === 'finished' && !this.armed) {
-        this.seconds = 0
-        this.day = ''
-        this.armed = true
-        this.reason = 'Finished · floor pad · move to restart'
-      }
+      this.takeoff = 0; this.needsLanding = false
+      if (!running) return false
+      this.phase = 'finished'
+      this.reason = 'Finished · lava · take off to retry'
+      this.result = { milliseconds: this.milliseconds, day: this.day, finishedAt: s.now, valid: true }
+      return true
+    }
+    if (!s.inside || s.focused === false) {
+      this.takeoff = 0
+      if (running) { this.phase = 'paused'; this.reason = s.inside ? 'Paused · return to game' : 'Paused · return to arena' }
       return false
     }
-    // Leaving the playable volume pauses the existing run. The first sample back inside
-    // only resumes it; its interval is discarded below, so time outside is never credited.
-    if (!s.inside) {
-      if (running) { this.phase = 'paused'; this.reason = 'Paused · return to arena' }
-      return false
-    }
-    if (s.focused === false) {
-      if (running) { this.phase = 'paused'; this.reason = 'Paused · return to game' }
-      return false
-    }
+    const airborne = (s.airborne ?? !s.supported) && !s.supported
     if (!running) {
-      if (!this.armed || s.supported || !s.moved) return false
-      this.seconds = 0
-      this.day = new Date(s.now).toISOString().slice(0, 10)
-      this.phase = 'airborne'
-      this.reason = 'Airborne'
-      this.armed = false
+      if (this.needsLanding || !airborne) { this.takeoff = 0; return false }
+      this.takeoff += Math.min(s.dt, s.wallDt)
+      if (this.takeoff + 1e-9 < .15) return false
+      this.seconds = 0; this.day = new Date(s.now).toISOString().slice(0, 10)
+      this.phase = 'airborne'; this.reason = 'Airborne'; this.result = undefined; this.takeoff = 0
       return false
     }
-    if (s.supported || !s.moved) {
-      this.phase = 'paused'
-      this.reason = s.supported ? 'Paused · jump or step off' : 'Paused · no motion'
-      return false
-    }
-    // Discard landing/takeoff boundary intervals instead of crediting standing time.
+    if (!airborne) { this.phase = 'paused'; this.reason = 'Paused · jump or step off'; return false }
     if (this.phase === 'airborne') this.seconds += Math.min(s.dt, s.wallDt)
-    this.phase = 'airborne'
-    this.reason = 'Airborne'
+    this.phase = 'airborne'; this.reason = 'Airborne'
     return false
   }
-
   get milliseconds(): number { return Math.floor(this.seconds * 1000 + 1e-6) }
 }
-
-/** Keeps a brief floor touch from slipping between the 20 Hz airtime samples. */
 export class FloorContactLatch {
   private pending = false
   record(touching: boolean) { if (touching) this.pending = true }
-  consume(): boolean {
-    const touching = this.pending
-    this.pending = false
-    return touching
-  }
+  consume(): boolean { const value = this.pending; this.pending = false; return value }
 }

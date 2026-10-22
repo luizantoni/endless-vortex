@@ -2,11 +2,11 @@ const { test } = require('node:test')
 const assert = require('node:assert/strict')
 const { Progress } = require('../src/progress.ts')
 
-test('replay and Monday rollover preserve PB and earned medals', () => {
+test('replay and Monday rollover preserve PB and best rank', () => {
   const p = new Progress(''); p.identify('a', 'Alice')
-  p.record(35000, '2026-09-06', Date.parse('2026-09-06T23:59:59Z'))
+  p.record(350000, '2026-09-06', Date.parse('2026-09-06T23:59:59Z'))
   p.rollover(Date.parse('2026-09-07T00:00:00Z'))
-  assert.equal(p.bestMs, 35000); assert.deepEqual(p.medals, [true, true, false]); assert.deepEqual(p.rows, [])
+  assert.equal(p.bestMs, 350000); assert.equal(p.rankTier,3); assert.deepEqual(p.rows, [])
 })
 test('late response from old identity cannot import its records into the new player', async () => {
   const realFetch = global.fetch
@@ -15,9 +15,9 @@ test('late response from old identity cannot import its records into the new pla
   try {
     const p = new Progress('http://test'); p.identify('a', 'Alice')
     const work = p.sync(); p.identify('b', 'Bob')
-    resolve({ ok: true, json: async () => ({ bestMs: 999000, medals: [true, true, true], week: '2026-09-07', rows: [] }) })
+    resolve({ ok: true, json: async () => ({ bestMs: 999000, week: '2026-09-07', rows: [] }) })
     await work
-    assert.equal(p.bestMs, 0); assert.deepEqual(p.medals, [false, false, false])
+    assert.equal(p.bestMs, 0); assert.equal(p.rankTier,0)
   } finally { global.fetch = realFetch }
 })
 test('offline writes retain session records and retry only the per-week maximum', async () => {
@@ -32,7 +32,7 @@ test('offline writes retain session records and retry only the per-week maximum'
     assert.equal(p.bestMs, 25000); assert.match(p.status, /offline/)
     global.fetch = async (url, init) => {
       if (init?.method === 'POST') bodies.push(JSON.parse(init.body))
-      return { ok: true, json: async () => ({ bestMs: 25000, medals: [true, false, false], week: '2026-09-07', rows: [] }) }
+      return { ok: true, json: async () => ({ bestMs: 25000, week: '2026-09-07', rows: [] }) }
     }
     await p.sync(); assert.equal(bodies.length, 1); assert.equal(bodies[0].airtimeMs, 25000)
   } finally { global.fetch = realFetch }
@@ -45,7 +45,7 @@ test('delayed old-week response cannot restore expired standings after midnight'
   try {
     const p = new Progress('http://test'); p.identify('a', 'Alice')
     const work = p.sync(); now = Date.parse('2026-09-07T00:00:01Z'); p.rollover(now)
-    resolve({ ok: true, json: async () => ({ bestMs: 60000, medals: [true, true, true], week: '2026-08-31',
+    resolve({ ok: true, json: async () => ({ bestMs: 60000, week: '2026-08-31',
       rows: [{ name: 'Alice', userId: 'a', airtimeMs: 60000, rank: 1 }] }) })
     await work
     assert.equal(p.week, '2026-09-07'); assert.deepEqual(p.rows, []); assert.equal(p.bestMs, 60000)
