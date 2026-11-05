@@ -22,7 +22,8 @@
     "entry:assets": "node scripts/generate-vortex-entry-cues.cjs",
     "scene:optimize": "node scripts/optimize-orchard.cjs",
     "size:check": "node scripts/check-scene-size.cjs",
-    "build:publish": "sdk-commands build --production && node scripts/check-scene-size.cjs"
+    "build:publish": "sdk-commands build --production && node scripts/check-scene-size.cjs",
+    "package:publish": "npm run build:publish && node scripts/package-publish.cjs"
   },
   "devDependencies": {
     "@dcl/js-runtime": "7.30.2-39321726891.commit-9926e63",
