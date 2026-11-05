@@ -1,12 +1,12 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),ts=require('typescript')
 const {ARENA}=require('../src/arena.ts'),{ORB_REWARD}=require('../src/orb-reward.ts')
 const launch={...ARENA.center,y:ORB_REWARD.height}
-function fixture(input,touch){
+function fixture(input,touch,coverHandoff){
  const data=()=>{const values=new Map();return {create:(id,value={})=>values.set(id,structuredClone(value)),createOrReplace:(id,value)=>values.set(id,structuredClone(value)),getOrNull:id=>values.get(id),getMutable:id=>values.get(id),deleteFrom:id=>values.delete(id)}}
  const Transform=data(),MainCamera=data(),VirtualCamera=data(),InputModifier=data(),TouchScreenControls=data(),AudioSource=data()
  let next=10,force,active=false,played=false,nativeCameraTarget
- const transitions=[]
- AudioSource.playSound=()=>played=true;AudioSource.stopSound=()=>played=false
+ const transitions=[], sounds=[]
+ AudioSource.playSound=(id,clip)=>{played=true;sounds.push({clip,pitch:AudioSource.getOrNull(id).pitch,volume:AudioSource.getOrNull(id).volume})};AudioSource.stopSound=()=>played=false
  const engine={addEntity:()=>next++,RootEntity:0,PlayerEntity:1,CameraEntity:2}
  const setCamera=MainCamera.createOrReplace
  MainCamera.createOrReplace=(id,value)=>{setCamera(id,value);nativeCameraTarget=value.virtualCameraEntity}
@@ -17,12 +17,12 @@ function fixture(input,touch){
  const mod={exports:{}}
  const code=ts.transpileModule(fs.readFileSync('src/orb-cinematic.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText
  new Function('require','exports',code)(name=>name==='./arena'?{ARENA}:name==='@dcl/sdk/math'?{Vector3:{create:(x,y,z)=>({x,y,z})}}:{engine,Transform,MainCamera,VirtualCamera,InputModifier,TouchScreenControls,AudioSource,Physics:{applyForceToPlayer:(_,value)=>force=value,removeForceFromPlayer:()=>force=undefined}},mod.exports)
- const c=mod.exports.createOrbCinematic(value=>{active=value;transitions.push(value)})
- return {c,config:mod.exports.ORB_CINEMATIC,engine,Transform,MainCamera,VirtualCamera,InputModifier,TouchScreenControls,transitions,
+ const c=mod.exports.createOrbCinematic(value=>{active=value;transitions.push(value)},coverHandoff)
+ return {c,config:mod.exports.ORB_CINEMATIC,engine,Transform,MainCamera,VirtualCamera,InputModifier,TouchScreenControls,transitions,sounds,
   get force(){return force},get active(){return active},get played(){return played},get nativeCameraTarget(){return nativeCameraTarget}}
 }
 function assertReleased(f){
- assert.equal(f.c.active,false);assert.equal(f.active,false);assert.equal(f.force,undefined);assert.equal(f.played,false)
+ assert.equal(f.c.active,false);assert.equal(f.c.remainingSeconds,undefined);assert.equal(f.active,false);assert.equal(f.force,undefined);assert.equal(f.played,false)
  const controls=f.InputModifier.getOrNull(1).mode.standard
  for(const field of ['disableAll','disableWalk','disableJog','disableRun','disableJump','disableDoubleJump','disableGliding'])assert.notEqual(controls[field],true,field+' is released')
  assert.equal(f.TouchScreenControls.getOrNull(0).hideJoystick,false)
@@ -76,14 +76,23 @@ test('disconnects, suspension, missing players and camera takeover always releas
 test('slow rest ascent gains high altitude and airtime, then hands off upward and slightly off center',()=>{
  const f=fixture();let moving={...launch},motion={x:0,y:0,z:0},elapsed=0
  f.c.start(moving)
+ let remaining = f.c.remainingSeconds
+ assert.equal(Math.ceil(remaining),9)
  for(let frame=0;frame<600&&f.c.active;frame++){
    f.c.update(.02,moving);elapsed+=.02
    if(!f.c.active)break
+   assert.ok(f.c.remainingSeconds <= remaining + 1e-8)
+   remaining = f.c.remainingSeconds
    assert.ok(f.force.y<=f.config.maxLiftForce)
    motion.x+=f.force.x*.02;motion.y+=(f.force.y-9.81)*.02;motion.z+=f.force.z*.02
    moving={x:moving.x+motion.x*.02,y:moving.y+motion.y*.02,z:moving.z+motion.z*.02}
  }
  assertReleased(f)
+ assert.equal(Math.ceil(remaining),1,'countdown reaches one before the crown handoff')
+ assert.deepEqual(f.sounds.filter(sound=>sound.clip===f.config.beatSound).map(sound=>sound.pitch),
+   [1,1.12,1.26,1.5], 'one increasingly pitched sound per final countdown beat')
+ assert.deepEqual(f.sounds.filter(sound=>sound.clip===f.config.beatSound).map(sound=>sound.volume),
+   [.48,.78,.90,1], 'the last three chimes are louder')
  assert.ok(elapsed>=8&&elapsed<=10.1,'rest provides several seconds of uninterrupted airborne time')
  assert.ok(moving.y>=f.config.liftHeight&&moving.y<ARENA.height-2)
  assert.ok(motion.y>3&&motion.y<6,'ascent remains gentle and hands back upward momentum')
@@ -97,4 +106,20 @@ test('miniature reward spheres follow the avatar in a bounded helix at any telep
    const p=goldenPlayerWrapPoint(player,i,age),r=Math.hypot(p.x-player.x,p.z-player.z)
    assert.ok(r>=.5&&r<=1.1);assert.ok(p.y>=player.y-.4&&p.y<=player.y+2.3)
  }
+})
+
+test('normal rest exit covers the view before releasing the camera and controls',()=>{
+ let flashes=0
+ const f=fixture(undefined,undefined,()=>flashes++)
+ f.c.start(launch)
+ f.c.update(.05,{...launch,y:f.config.liftHeight})
+ assert.equal(flashes,1)
+ assert.ok(f.nativeCameraTarget,'the camera is still in place on the flash frame')
+ f.c.update(.05,{...launch,y:f.config.liftHeight})
+ assertReleased(f)
+ assert.equal(f.nativeCameraTarget,undefined)
+ assert.equal(f.c.restoringCamera,true)
+ for(let i=0;i<12;i++) f.c.update(.05,launch)
+ assert.equal(f.c.restoringCamera,false)
+ assert.equal(flashes,1)
 })

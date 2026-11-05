@@ -439,14 +439,8 @@
             "categories": [],
             "author": "antonio azzolino",
             "email": "@antonioazzolino",
-            "tags": [
-              ""
-            ],
+            "tags": [],
             "layout": {
-              "base": {
-                "x": 0,
-                "y": 0
-              },
               "parcels": [
                 {
                   "x": 0,
@@ -644,7 +638,11 @@
                   "x": 6,
                   "y": 0
                 }
-              ]
+              ],
+              "base": {
+                "x": 0,
+                "y": 0
+              }
             },
             "silenceVoiceChat": false,
             "disablePortableExperiences": false,
@@ -661,8 +659,11 @@
                     ]
                   },
                   "y": {
-                    "$case": "single",
-                    "value": 0
+                    "$case": "range",
+                    "value": [
+                      0,
+                      0
+                    ]
                   },
                   "z": {
                     "$case": "range",

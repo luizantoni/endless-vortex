@@ -23,7 +23,7 @@ node.translation = [0, 1, 2].map(axis => -((min[axis] + max[axis]) / 2) * scale[
 // Preserve the authored colors/textures while giving rotating leaves a subtle self-lit tint.
 for (const material of json.materials || []) {
   const base = material.pbrMetallicRoughness?.baseColorFactor || [0.15, 0.55, 0.25, 1]
-  material.emissiveFactor = base.slice(0, 3).map(value => value * 0.22)
+  material.emissiveFactor = base.slice(0, 3).map(value => value * 0.34)
 }
 
 const rawJson = Buffer.from(JSON.stringify(json))

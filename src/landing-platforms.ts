@@ -16,6 +16,7 @@ export const LANDINGS = {
   orbitWobbleDegrees: 4, radialWobble: 0.45 * BUILD_SCALE, verticalWobble: 0.18 * BUILD_SCALE,
   selfSpinMin: 8, selfSpinMax: 12, selfTumbleRange: 0,
   contactEpsilon: 0.35,
+  innerOrbitRadius: 13.5, innerHeight: 4.5,
   heights: [3 * ARENA.scale, 5.5 * ARENA.scale, 8 * ARENA.scale, 10 * ARENA.scale] as readonly number[]
 } as const
 export const landingSlots: Point[] = LANDINGS.heights.flatMap((y, level) => {
@@ -23,8 +24,11 @@ export const landingSlots: Point[] = LANDINGS.heights.flatMap((y, level) => {
   const radius = level < 2 ? LANDINGS.orbitRadius : LANDINGS.upperOrbitRadius
   return Array.from({ length: count }, (_, index) => {
     const angle = (index + level * 0.5) * Math.PI * 2 / count
-    return { x: ARENA.center.x + Math.cos(angle) * radius, y,
-      z: ARENA.center.z + Math.sin(angle) * radius }
+    // Move every other slot in the lowest band inward for an easier approach from the updraft.
+    const inner = level === 0 && index % 2 === 0
+    const laneRadius = inner ? LANDINGS.innerOrbitRadius : radius
+    return { x: ARENA.center.x + Math.cos(angle) * laneRadius, y: inner ? LANDINGS.innerHeight : y,
+      z: ARENA.center.z + Math.sin(angle) * laneRadius }
   })
 })
 

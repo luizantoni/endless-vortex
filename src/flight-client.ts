@@ -1,3 +1,4 @@
+import type { BonusOrb } from './daily-orbs'
 import { presentFlightResult } from './flight-feedback'
 import { isStateSyncronized } from '@dcl/sdk/network'
 import { flightRoom } from './multiplayer-messages'
@@ -35,4 +36,9 @@ export function sendFlightInput(dt:number,supported:boolean,rockTouch:boolean,fo
   inputClock=0
   lastRockTouch=rockTouch
   void flightRoom.send('flightInput',{supported,rockTouch,focused,name:name.slice(0,64)})
+}
+
+
+export function sendBonusOrbPickup(kind: BonusOrb, slot: number) {
+  void flightRoom.send('bonusOrbPickup', { kind, slot })
 }

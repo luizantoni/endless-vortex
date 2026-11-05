@@ -1,6 +1,8 @@
-import { isOrbRewardDestination } from './orb-reward'
-import { Airtime } from './airtime'
-import { Point, insideArena } from './arena'
+import { isBonusOrb, ORB_PICKUP_BONUS, GOLD_ORB_SECONDS } from './daily-orbs'
+import { BUBBLES, nearBubbleLane } from './bubble-rules'
+import { orbRewardKindAt, orbRewardBonus, ORB_REWARD } from './orb-reward'
+import { Airtime, isFlightDiscontinuity } from './airtime'
+import { Point, insideArena, insideFlightColumn } from './arena'
 import { clearForTakeoff, touchingLava } from './lava-contact'
 import { RockRecovery } from './rock-recovery'
 export type SavedFlight = { userId: string; name: string; airtimeMs: number }
@@ -9,7 +11,7 @@ export type AuthoritySnapshot = {
   result?: { milliseconds: number; record: boolean; valid: boolean }
   rows: (SavedFlight & {rank: number})[]; saved: boolean; ready: boolean
 }
-type Runner = { run: Airtime; rockRecovery: RockRecovery; previous?: Point; hintAt: number; supported: boolean; rockTouch: boolean; focused: boolean; name: string; resultId: number; result?: AuthoritySnapshot['result']; revision: number }
+type Runner = { run: Airtime; rockRecovery: RockRecovery; previous?: Point; sampledAt?: number; bankedOrbSeconds?: number; bankedOrbCount?: number; setRewardAt?: number; setRewardOrigin?: Point; paidOrbCount?: number; bonusOrbTimes?: Map<number, number>; hintAt: number; supported: boolean; rockTouch: boolean; name: string; resultId: number; result?: AuthoritySnapshot['result']; revision: number }
 type Store = { get(): Promise<string | null>; set(value: string): Promise<boolean>; getPlayer?(id:string):Promise<string|null>; setPlayer?(id:string,value:string):Promise<boolean> }
 export class FlightAuthority {
   ready = false
@@ -58,16 +60,36 @@ export class FlightAuthority {
   private runner(id: string): Runner {
     let value = this.runners.get(id)
     if (!value) {
-      value = {run: new Airtime(), rockRecovery: new RockRecovery(), hintAt: 0, supported: false, rockTouch: false, focused: false, name: this.records.get(id)?.name || 'Runner', resultId: 0, revision: 0}
+      value = {run: new Airtime(), rockRecovery: new RockRecovery(), hintAt: 0, supported: false, rockTouch: false, name: this.records.get(id)?.name || 'Runner', resultId: 0, revision: 0}
       this.runners.set(id, value)
     }
     return value
   }
-  input(verifiedAddress: string, supported: boolean, focused: boolean, name: string, now: number, rockTouch = false) {
+  input(verifiedAddress: string, supported: boolean, _focused: boolean, name: string, now: number, rockTouch = false) {
     const runner = this.runner(verifiedAddress)
     // These hints can pause/decrease time, never supply a position, time, result or another identity.
-    runner.hintAt = now; runner.supported = supported; runner.rockTouch = rockTouch; runner.focused = focused
+    runner.hintAt = now; runner.supported = supported; runner.rockTouch = rockTouch
     runner.name = Array.from(name.replace(/<[^>]*>/g, '').replace(/\u0000/g, '')).slice(0,32).join('') || 'Runner'
+  }
+  bonusOrbPickup(id: string, kind: string, slot: number, now: number): boolean {
+    const player = this.runners.get(id)
+    if (!player?.previous || player.sampledAt === undefined || now - player.sampledAt > 750 ||
+      !isBonusOrb(kind) || (player.run.phase !== 'airborne' && player.run.phase !== 'paused')) return false
+    const justPaid = player.setRewardAt !== undefined && now - player.setRewardAt <= 750 &&
+      player.setRewardOrigin && nearBubbleLane(player.setRewardOrigin, slot)
+    if (!justPaid && !nearBubbleLane(player.previous, slot)) return false
+    const times = player.bonusOrbTimes ??= new Map()
+    if (now - (times.get(slot) ?? -Infinity) < (BUBBLES.respawn - .4) * 1000 ||
+      ((justPaid ? player.paidOrbCount : player.bankedOrbCount) ?? 0) >= ORB_REWARD.every) return false
+    times.set(slot, now)
+    if (justPaid) {
+      player.paidOrbCount = (player.paidOrbCount ?? 0) + 1
+      player.run.addBonus(ORB_PICKUP_BONUS[kind] - GOLD_ORB_SECONDS)
+    } else {
+      player.bankedOrbCount = (player.bankedOrbCount ?? 0) + 1
+      player.bankedOrbSeconds = (player.bankedOrbSeconds ?? 0) + ORB_PICKUP_BONUS[kind] - GOLD_ORB_SECONDS
+    }
+    return true
   }
   sample(id: string, position: Point, dt: number, now: number, rockSupport = false, rockTouch = false) {
     if (!this.ready) return
@@ -80,14 +102,32 @@ export class FlightAuthority {
     const rockGrace = value.rockRecovery.update(now, confirmedRockTouch, confirmedRockSupport)
     const lava = touchingLava(position, supported || rockGrace)
     const distance = value.previous ? Math.hypot(position.x-value.previous.x,position.y-value.previous.y,position.z-value.previous.z) : 0
-    const teleported = !lava && distance > (rockGrace ? 20 : 8) &&
-      !(distance < 80 && isOrbRewardDestination(position))
+    const rewardDestination = distance < 80 ? orbRewardKindAt(position) : undefined
+    // A valid reward moves inward from an orb lane in one sample. A normal pass
+    // through the destination (or repeated samples after arrival) earns nothing.
+    const rewardJump = rewardDestination && value.previous && insideArena(value.previous) &&
+      Math.hypot(position.x - value.previous.x, position.z - value.previous.z) > 8
+    const teleported = !lava && !rewardDestination && isFlightDiscontinuity(value.previous, position, dt, rockGrace ? 20 : 8)
     const previousPhase=value.run.phase
-    const finished = value.run.update({dt, wallDt: dt, now, connected: true, inside: insideArena(position), floor: lava,
-      supported, airborne: clearForTakeoff(position,supported), moved: false, teleported, focused: fresh && value.focused})
+    const finished = value.run.update({dt, wallDt: dt, now, connected: true, inside: insideFlightColumn(position), floor: lava,
+      supported, airborne: clearForTakeoff(position,supported), moved: false, teleported})
+    if (rewardDestination && rewardJump && !finished && (previousPhase === 'airborne' || previousPhase === 'paused')) {
+      const completedSet = rewardDestination === 'set'
+      value.run.addBonus(orbRewardBonus(rewardDestination) + (completedSet ? value.bankedOrbSeconds ?? 0 : 0))
+      if (completedSet) {
+        value.setRewardAt = now
+        value.setRewardOrigin = value.previous
+        value.paidOrbCount = value.bankedOrbCount
+        value.bankedOrbSeconds = value.bankedOrbCount = 0
+      }
+    }
     value.previous = {...position}
+    value.sampledAt = now
     if (previousPhase === 'finished' && value.run.phase === 'airborne') { value.result=undefined;value.resultId=0 }
     if (!finished) return
+    value.bankedOrbSeconds = value.bankedOrbCount = 0
+    value.setRewardAt = undefined
+    value.setRewardOrigin = undefined
     const result = value.run.result!
     const best = this.records.get(id)?.airtimeMs || 0
     value.resultId = ++this.serial

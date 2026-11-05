@@ -112,6 +112,7 @@ test('actual HUD mounts the guide, restores the live HUD after skip, and opens i
   new Function('exports',ts.transpileModule(fs.readFileSync('src/flight-ranks.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(rankMod.exports)
   const imports={
     './flight-ranks':rankMod.exports,
+ './daily-orbs':require('../src/daily-orbs.ts'),
  './orb-reward':{ORB_REWARD:{every:5}},
     './tutorial':load(),
     '@dcl/sdk/react-ecs':{__esModule:true,default:react,UiEntity:'entity',ReactEcsRenderer:{setUiRenderer:f=>render=f}},

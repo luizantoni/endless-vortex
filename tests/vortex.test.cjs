@@ -60,7 +60,7 @@ test('5x5 scene and Creator Hub parcel/spawn metadata agree', () => {
   assert.deepEqual(scene.spawnPoints[0].position.y, [0, 0])
   assert.ok(scene.spawnPoints[0].position.x.every(x => x > 32 && x < 48))
 })
-test('installed SDK: wind forces without planes, retained gliding, matching platform colliders', async (t) => {
+test('installed SDK: visible central updraft, retained gliding, matching platform colliders', async (t) => {
   const fs = require('node:fs'), Module = require('node:module'), ts = require('typescript')
   const ecs = require('@dcl/ecs/dist-cjs')
   const oldJs = require.extensions['.js']
@@ -73,8 +73,9 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   let math
   try { math = require('@dcl/ecs-math') } finally { require.extensions['.js'] = oldJs }
   const load = Module._load
-  const display = {}
+  const display = { orbKinds: [] }
   let groundCallback
+  const flightHandlers = new Map()
   const footCallbacks = []
   const sdkEcs = { ...ecs, raycastSystem: { ...ecs.raycastSystem,
     registerGlobalDirectionRaycast: (options, callback) => {
@@ -89,7 +90,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     if (request === '@dcl/sdk/players') return { getPlayer: () => ({ userId: 'local', name: 'Local' }),
       onEnterScene: () => {}, onLeaveScene: () => {} }
     if (request === '@dcl/sdk/server') return { Storage: { get: async () => null, set: async () => true } }
-    if (request === '@dcl/sdk/network') return { isServer: () => false, isStateSyncronized: () => true, registerMessages: () => ({ onMessage: () => {}, send: async () => {} }), myProfile: { networkId: 1 }, syncEntity: () => {}, parentEntity: () => {} }
+    if (request === '@dcl/sdk/network') return { isServer: () => false, isStateSyncronized: () => true, registerMessages: () => ({ isReady: () => true, onMessage: (name, handler) => flightHandlers.set(name, handler), send: async () => {} }), myProfile: { networkId: 1 }, syncEntity: () => {}, parentEntity: () => {} }
     if (request === '@dcl/sdk/message-bus') return { MessageBus: class {
       on(_name, callback) { this.callback = callback }
       emit(name, payload) { this.callback?.(payload, 'self') }
@@ -196,11 +197,11 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     assert.deepEqual(Transform.get(wind).scale, Transform.get(authoredEnvironment).scale)
     const state = ecs.Animator.get(wind).states[0]
     assert.equal(state.clip, 'Animation'); assert.equal(state.playing, true); assert.equal(state.loop, true)
-    assert.ok(state.speed >= 0.8 && state.speed <= 1.2)
+    assert.ok(Number.isFinite(state.speed) && Math.abs(state.speed) <= 1.2)
   })
   const windMaterials = readPrimitiveMaterial('assets/models/endless-vortex-wind.glb').materials
   assert.deepEqual(windMaterials.map(material => Number(material.pbrMetallicRoughness.baseColorFactor[3].toFixed(3))),
-    [0.025, 0.238, 0.287, 0.189, 0.112, 0.63])
+    [0.02, 0.19, 0.23, 0.151, 0.09, 0.504])
   const floorResetTrigger = [...engine.getEntitiesWith(ecs.TriggerArea, Transform)].find(([id, trigger]) =>
     Math.abs(Transform.get(id).position.y - (ARENA.floorTop + 0.0001)) < 1e-7 &&
     Math.abs(Transform.get(id).scale.y - 0.0001) < 1e-7)
@@ -208,13 +209,36 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   const visuals = [...engine.getEntitiesWith(ecs.MeshRenderer, Transform)]
   const { BUBBLES: orbTuning } = require('../src/bubble-rules.ts')
   const { ENTRY_CUES } = require('../src/vortex-entry-cues.ts')
-  assert.equal(visuals.length, orbTuning.count * 2 + orbTuning.particleCount + ENTRY_CUES.incoming + ENTRY_CUES.rising)
+  const streaks = visuals.filter(([id]) =>
+    ecs.Material.getOrNull(id)?.material?.pbr?.texture?.tex?.texture?.src === 'assets/ui/modular/updraft-streak.png')
+  assert.equal(streaks.length, 42)
+  const reversalSparks = visuals.filter(([id]) => ecs.Material.getOrNull(id)?.material?.pbr?.emissiveIntensity === 4.5)
+  assert.equal(reversalSparks.length, 24)
+  assert.ok(streaks.some(([id]) => Transform.get(id).position.y > ARENA.height * .9))
+  const boardFace = visuals.find(([id]) =>
+    ecs.Material.getOrNull(id)?.material?.unlit?.texture?.tex?.texture?.src === 'assets/ui/leaderboard/flight-records.png')?.[0]
+  assert.ok(boardFace, 'the world leaderboard uses its own face texture')
+  const boardRoot = Transform.get(boardFace).parent
+  const billboardFace = visuals.find(([id]) =>
+    ecs.Material.getOrNull(id)?.material?.unlit?.texture?.tex?.texture?.src === 'assets/ui/billboards/stay-in-the-air.png')?.[0]
+  assert.ok(billboardFace, 'the promotional billboard is in the scene')
+  const billboard = Transform.get(Transform.get(billboardFace).parent)
+  const leaderboard = Transform.get(boardRoot)
+  assert.equal(billboard.position.x + leaderboard.position.x, ARENA.center.x * 2)
+  assert.equal(billboard.position.z, leaderboard.position.z)
+  assert.equal(billboard.rotation.y, -leaderboard.rotation.y)
+  assert.deepEqual(billboard.scale, leaderboard.scale)
+  assert.equal(Transform.get(billboardFace).scale.x / Transform.get(billboardFace).scale.y, 2)
+  const boardMeshes = visuals.filter(([id]) => [boardRoot, Transform.get(billboardFace).parent].includes(Transform.get(id).parent))
+  assert.equal(visuals.length, boardMeshes.length + streaks.length + reversalSparks.length + orbTuning.count * 2 + orbTuning.particleCount + ENTRY_CUES.incoming + ENTRY_CUES.rising)
   assert.equal(visuals.filter(([, mesh]) => mesh.mesh.$case === 'plane').length,
-    orbTuning.count)
+    orbTuning.count + streaks.length + 2)
   assert.equal(visuals.filter(([, mesh]) => mesh.mesh.$case === 'cylinder').length, 0)
   assert.equal(visuals.filter(([, mesh]) => mesh.mesh.$case === 'sphere').length,
-    orbTuning.count + orbTuning.particleCount + ENTRY_CUES.incoming + ENTRY_CUES.rising)
-  assert.equal([...engine.getEntitiesWith(ecs.TextShape)].length, 0) // No global board or overhead platform labels.
+    orbTuning.count + orbTuning.particleCount + ENTRY_CUES.incoming + ENTRY_CUES.rising + reversalSparks.length)
+  const boardLabels = [...engine.getEntitiesWith(ecs.TextShape)].map(([id]) => id)
+  assert.equal(boardLabels.length, 31)
+  assert.ok(boardLabels.every(id => Transform.get(id).parent === boardRoot), 'world labels stay attached to the leaderboard')
   assert.equal([...engine.getEntitiesWith(ecs.Billboard)].length,
     orbTuning.count)
   assert.ok(visuals.every(([id])=>!ecs.MeshCollider.has(id)), 'blue orb cues add no physical collision')
@@ -248,12 +272,15 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   Transform.getMutable(player).position = { x: 50 / 2 * BUILD_SCALE, y: 6 / 2 * BUILD_SCALE, z: 50 / 2 * BUILD_SCALE }
   await engine.update(0.05)
   const rotating = PhysicsCombinedForce.get(player).vector
-  assert.ok(rotating.x < -7.7 && rotating.x > -7.8)
+  assert.ok(Math.abs(rotating.x) < 7.8)
   assert.equal(rotating.y, 44 * AIRFLOW.mobileLift)
-  assert.ok(rotating.z > 7.7 && rotating.z < 7.8) // Tangential rotation plus central lift; no inward pull.
+  assert.ok(Math.abs(rotating.x + rotating.z) < 1e-6) // Tangential rotation plus central lift; no inward pull.
   Transform.getMutable(player).position = at({ x: 18, y: 2, z: 16 })
   await engine.update(0.05)
-  assert.deepEqual(PhysicsCombinedForce.get(player).vector, { x: 0, y: 0, z: 11 }) // Rotation remains; broad lift is paused.
+  const broad = PhysicsCombinedForce.get(player).vector
+  assert.equal(broad.x, 0)
+  assert.equal(broad.y, 0) // Broad lift is paused.
+  assert.ok(Math.abs(broad.z) <= AIRFLOW.spin)
   Transform.getMutable(player).position = { x: 86 / 2 * BUILD_SCALE, y: 10 / 2 * BUILD_SCALE, z: 48 / 2 * BUILD_SCALE }
   await engine.update(0.05)
   assert.equal(PhysicsCombinedForce.has(player), false) // No outer containment pull or distant rotation.
@@ -277,6 +304,10 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   assert.ok(Math.abs(LANDINGS.halfWidth * 2 - 1.96 * BUILD_SCALE * 0.9) < 0.02)
   assert.equal(LANDINGS.count, 48)
   assert.equal(landingSlots.length, 80)
+  const inner = landingSlots.filter(slot => slot.y < LANDINGS.heights[0])
+  assert.equal(inner.length, 8)
+  assert.ok(inner.every(slot => Math.abs(Math.hypot(slot.x - ARENA.center.x, slot.z - ARENA.center.z) -
+    LANDINGS.innerOrbitRadius) < 1e-9))
   assert.equal(landingSlots.filter(slot => slot.y >= LANDINGS.heights[2]).length, 48)
   assert.ok(landingSlots.filter(slot => slot.y >= LANDINGS.heights[2]).every(slot =>
     Math.abs(Math.hypot(slot.x - ARENA.center.x, slot.z - ARENA.center.z) - LANDINGS.upperOrbitRadius) < 1e-9))
@@ -286,7 +317,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   assert.ok(ARENA.radius - LANDINGS.orbitRadius - LANDINGS.radius >= 1.7)
   for (let time = 0; time <= 45; time += 0.5) {
     const positions = landingSlots.map(slot => orbitPoint(slot, time))
-    assert.ok(positions.every(p => p.y >= LANDINGS.heights[0] &&
+    assert.ok(positions.every(p => p.y >= LANDINGS.innerHeight &&
       Math.hypot(p.x - ARENA.center.x, p.z - ARENA.center.z) - LANDINGS.radius > 4 &&
       p.x - LANDINGS.radius > 0 && p.x + LANDINGS.radius < ARENA.size &&
       p.z - LANDINGS.radius > 0 && p.z + LANDINGS.radius < ARENA.size))
@@ -324,8 +355,8 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     if (observedPlatform && leafSolid(observedPlatform)) {
       const p = Transform.get(observedPlatform).position
       const radius = Math.hypot(p.x - ARENA.center.x, p.z - ARENA.center.z)
-      const expectedRadius = p.y > (LANDINGS.heights[1] + LANDINGS.heights[2]) / 2
-        ? LANDINGS.upperOrbitRadius : LANDINGS.orbitRadius
+      const expectedRadius = p.y < (LANDINGS.innerHeight + LANDINGS.heights[0]) / 2 ? LANDINGS.innerOrbitRadius :
+        p.y > (LANDINGS.heights[1] + LANDINGS.heights[2]) / 2 ? LANDINGS.upperOrbitRadius : LANDINGS.orbitRadius
       assert.ok(Math.abs(radius - expectedRadius) <= LANDINGS.radialWobble + 1e-6)
       assert.ok(p.x - LANDINGS.radius > 0 && p.x + LANDINGS.radius < ARENA.size)
       assert.ok(p.z - LANDINGS.radius > 0 && p.z + LANDINGS.radius < ARENA.size)
@@ -338,7 +369,7 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   }
   assert.ok(sawSolid); assert.ok(stoodOnPlatform); assert.ok(sawExpiry); assert.ok(sawOrbit); assert.ok(sawSelfRotation)
   assert.equal([...engine.getEntitiesWith(ecs.MeshRenderer)].length,
-    orbTuning.count * 2 + orbTuning.particleCount + ENTRY_CUES.incoming + ENTRY_CUES.rising)
+    boardMeshes.length + streaks.length + reversalSparks.length + orbTuning.count * 2 + orbTuning.particleCount + ENTRY_CUES.incoming + ENTRY_CUES.rising)
   await engine.update(2)
   assert.equal(activeLeaves().length, 0) // no collider sweep after suspension
 
@@ -554,15 +585,15 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
   await t.test('local golden orbs spin, pop once, respawn, mute and avoid platform geometry', () => {
     const { createRecoveryBubbles } = require('../src/bubbles.ts')
     const { BUBBLES } = require('../src/bubble-rules.ts')
-    function field(blocked = () => false) {
+    function field(blocked = () => false, roll = .9, onRarePickup) {
       const before = new Set([...engine.getEntitiesWith(ecs.MeshRenderer)].map(([id]) => id))
       const beforeAudio = new Set([...engine.getEntitiesWith(ecs.AudioSource)].map(([id]) => id))
-      const manager = createRecoveryBubbles(blocked, () => 0)
+      const manager = createRecoveryBubbles(blocked, () => 0, onRarePickup, () => roll)
       const ids = [...engine.getEntitiesWith(ecs.MeshRenderer)].map(([id]) => id).filter(id => !before.has(id))
       const bodies = ids.filter(id => Transform.get(id).parent === engine.RootEntity &&
         ecs.MeshRenderer.get(id).mesh.$case === 'sphere' && Transform.get(id).scale.x > 0.2)
-      const sound = [...engine.getEntitiesWith(ecs.AudioSource)].map(([id]) => id).find(id => !beforeAudio.has(id))
-      return { manager, ids, bodies, sound }
+      const sounds = [...engine.getEntitiesWith(ecs.AudioSource)].filter(([id]) => !beforeAudio.has(id)).map(([id]) => id)
+      return { manager, ids, bodies, sounds, sound: sounds[0] }
     }
     const a = field(), b = field(), obstructed = field(() => true), away = { x: 48 / 2 * BUILD_SCALE, y: 4 / 2 * BUILD_SCALE, z: 48 / 2 * BUILD_SCALE }
     const step = (f, position = away, canPop = false, velocity = 0) => f.manager.update(0.05, position, velocity, false, canPop)
@@ -573,6 +604,10 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     assert.ok(a.ids.every(id => !ecs.MeshCollider.has(id)))
     assert.ok(obstructed.ids.every(id => !ecs.VisibilityComponent.get(id).visible))
     const target = a.bodies.find(id => ecs.VisibilityComponent.get(id).visible)
+    const overlayOf = (field, body) => field.ids.find(id => Transform.getOrNull(Transform.get(id).parent)?.parent === body)
+    const overlayMaterial = (field, body) => ecs.Material.get(overlayOf(field, body)).material.pbr
+    assert.equal(overlayMaterial(a, target).texture.tex.texture.src, 'assets/ui/modular/vortex.png')
+    assert.equal(overlayMaterial(a, target).transparencyMode, ecs.MaterialTransparencyMode.MTM_ALPHA_BLEND)
     const sparkIds = a.ids.filter(id => ecs.MeshRenderer.get(id).mesh.$case === 'sphere' &&
       Transform.get(id).scale.x < 0.2)
     assert.equal(sparkIds.length, BUBBLES.particleCount)
@@ -583,6 +618,8 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     assert.equal(step(a, p, false), 0) // Absent/disconnected/outside player cannot collect.
     assert.equal(step(a, p, true), BUBBLES.desktopImpulse)
     assert.equal(step(a, p, true), 0)
+    assert.equal(overlayMaterial(a, target).transparencyMode, ecs.MaterialTransparencyMode.MTM_ALPHA_BLEND)
+    assert.ok(overlayMaterial(a, target).albedoColor.a < 1, 'the orb overlay still fades when collected')
     assert.equal(ecs.AudioSource.get(a.sound).playing, true)
     assert.equal(ecs.AudioSource.get(b.sound).playing, false)
     assert.ok(b.bodies.every(id => ecs.VisibilityComponent.get(id).visible))
@@ -614,6 +651,54 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
     assert.equal(a.manager.getPoppedTotal(), totalBeforeReset, 'visual reset preserves the lifetime pickup counter')
     a.manager.explodeAccumulation(away)
     assert.ok(sparkIds.every(id => ecs.VisibilityComponent.get(id).visible), 'reward celebration still works after a reset')
+
+    const { createDailyOrbClient } = require('../src/daily-orb-client.ts')
+    const { publishSharedObstacleEvent } = require('../src/shared-obstacles.ts')
+    for (const [kind, roll] of [['blue', .1], ['purple', .03], ['rainbow', 0]]) {
+      const daily = createDailyOrbClient()
+      daily.update(Date.now(), 'local')
+      const collected = [], rare = field(undefined, roll, value => {
+        collected.push(value)
+        daily.collect(value)
+      })
+      for (let i = 0; i < 100; i++) step(rare)
+      const target = rare.bodies[0]
+      assert.equal(overlayMaterial(rare, target).texture.tex.texture.src, `assets/ui/modular/orb-${kind}.png`)
+      assert.equal(overlayMaterial(rare, target).transparencyMode, ecs.MaterialTransparencyMode.MTM_ALPHA_BLEND)
+      publishSharedObstacleEvent('orb', 0, 'pop')
+      for (let i = 0; i < 10; i++) step(rare)
+      assert.equal(ecs.VisibilityComponent.get(target).visible, true, 'a peer’s gold pickup cannot consume this rare orb')
+      assert.equal(daily.progress.pickups[kind].length, 0)
+      const position = { ...Transform.get(target).position }
+      step(rare, position)
+      step(rare, position, true)
+      step(rare, position, true)
+      assert.deepEqual(collected, [kind], 'only the local collector gets daily credit, once')
+      assert.equal(daily.progress.pickups[kind].length, 1, 'a pickup increments the matching daily goal')
+      assert.deepEqual(rare.sounds.map(id => ecs.AudioSource.get(id)).filter(source => source.playing)
+        .map(source => source.audioClipUrl), [`assets/sounds/orb-pickup-${kind}.mp3`])
+      rare.manager.setVolume(0)
+      assert.ok(rare.sounds.every(id => !ecs.AudioSource.get(id).playing))
+      const particles = rare.ids.filter(id => !rare.bodies.includes(id) &&
+        ecs.MeshRenderer.get(id).mesh.$case === 'sphere' && ecs.VisibilityComponent.get(id).visible)
+      const colors = ids => ids.map(id => ecs.Material.get(id).material.pbr.emissiveColor)
+      const matches = colors => {
+        assert.ok(colors.length > 0)
+        if (kind === 'rainbow') {
+          assert.ok(colors.some(c => c.r > c.b && c.r > c.g))
+          assert.ok(colors.some(c => c.g > c.r && c.g > c.b))
+          assert.ok(colors.some(c => c.b > c.r && c.b > c.g))
+        } else if (kind === 'blue') assert.ok(colors.every(c => c.b > c.g && c.g > c.r))
+        else assert.ok(colors.every(c => c.b > c.r && c.r > c.g))
+      }
+      matches(colors(particles))
+      rare.manager.resetAccumulation(true)
+      rare.manager.explodeAccumulation(away)
+      step(rare)
+      // Pickup bursts retain their color through the five-sphere reward.
+      matches(colors(particles.slice(BUBBLES.accumulationPerPop)))
+      rare.manager.dispose()
+    }
   })
 
   await t.test('rocks2 use visible geometry, bob on landing, and fall independently in 0.3 seconds', () => {
@@ -741,6 +826,31 @@ test('installed SDK: wind forces without planes, retained gliding, matching plat
       manager.update(dt,away)
       assert.ok(Transform.get(target).position.y<height,'the leaf visibly falls after release')
     }
+  })
+
+  await t.test('the in-world board updates from confirmed records and keeps the published top ten', async () => {
+    const texts = () => boardLabels.map(id => ecs.TextShape.get(id).text)
+    assert.ok(texts().includes('CONNECTING TO FLIGHT RECORDS'))
+    const scores = Array.from({ length: 11 }, (_, i) => ({
+      userId: 'pilot-' + i, name: i === 0 ? '<b>Aurora</b>' : 'Pilot ' + (i + 1),
+      airtimeMs: 75420 - i * 1000, rank: i + 1
+    }))
+    const send = (rows, saved) => flightHandlers.get('flightState')({ payload: JSON.stringify({
+      rows, saved, userId: 'local', ready: true, milliseconds: 0, bestMs: 0, resultId: 0, phase: 'grounded'
+    }) })
+    send([], true)
+    await engine.update(.3)
+    assert.ok(texts().some(text => text.startsWith('NO RECORDS YET')))
+    send(scores, true)
+    await engine.update(.3)
+    const published = texts()
+    assert.ok(published.includes('01:15.420'))
+    assert.ok(published.includes('Aurora'))
+    assert.ok(published.includes('Pilot 10'))
+    assert.ok(!published.includes('Pilot 11'))
+    send([{ ...scores[0], name: 'Still saving' }], false)
+    await engine.update(.3)
+    assert.deepEqual(texts(), published)
   })
 
 })

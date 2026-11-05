@@ -1,25 +1,38 @@
+import { DAILY_ORBS, RareOrb, rareOrbTexture, rollRareOrb } from './daily-orbs'
 import { AudioSource, Billboard, BillboardMode, engine, Material, MaterialTransparencyMode, MeshRenderer, Transform, VisibilityComponent } from '@dcl/sdk/ecs'
 import { Color3, Color4, Quaternion, Vector3 } from '@dcl/sdk/math'
 import { ARENA, BUILD_SCALE, Point } from './arena'
-import { BUBBLES as B, BubbleLift, goldenPlayerWrapPoint, goldenVortexOrbitPoint,
+import { BUBBLES as B, BubbleLift, bubbleSlot, goldenPlayerWrapPoint, goldenVortexOrbitPoint,
   goldenVortexParticlePoint, sweptBubbleContact } from './bubble-rules'
 import { ORB_CINEMATIC } from './orb-cinematic'
 import { createSharedRandom, onSharedObstacleEvent, publishSharedObstacleEvent } from './shared-obstacles'
 
 const vortexTexture = 'assets/ui/modular/vortex.png'
 
-// Height lanes sit between platform surfaces so normal orbits don't repeatedly hide/re-spawn bubbles.
-const slots = [3.5, 7, 10.5, 15].flatMap((y, layer) => Array.from({ length: 12 }, (_, index) => ({
-  y: y * BUILD_SCALE, radius: [9, 13, 17][(index + layer) % 3] * BUILD_SCALE, angle: index * Math.PI / 6 + layer * 0.3
-})))
+function paintOrbOverlay(entity: ReturnType<typeof engine.addEntity>, src: string, opacity: number) {
+  const texture = Material.Texture.Common({ src })
+  // The unlit material can render transparent PNG pixels as black in Explorer.
+  // Explicit alpha blending preserves the soft edges and the pickup fade.
+  Material.setPbrMaterial(entity, {
+    texture, albedoColor: Color4.create(1, 1, 1, opacity),
+    emissiveTexture: texture, emissiveColor: Color3.create(1, 1, 1), emissiveIntensity: .85,
+    directIntensity: 0, specularIntensity: 0, metallic: 0, roughness: 1, castShadows: false,
+    transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
+  })
+}
 
-export function createRecoveryBubbles(_blocked: (point: Point, radius: number) => boolean, random = Math.random) {
+export function createRecoveryBubbles(_blocked: (point: Point, radius: number) => boolean, random = Math.random, onPickup?: (kind: RareOrb | undefined, index: number) => void | boolean, rarityRandom = Math.random) {
   if (random === Math.random) random = createSharedRandom(0x4f524253)
   const lift = new BubbleLift()
-  const sound = engine.addEntity()
-  Transform.create(sound, { parent: engine.PlayerEntity })
-  AudioSource.create(sound, { audioClipUrl: B.sound, playing: false, loop: false, global: true, volume: B.volume })
-  let volume: number = B.volume, time = 0, soundReadyAt = 0, poppedTotal = 0
+  const pickupSounds = new Map<RareOrb | undefined, { entity: ReturnType<typeof engine.addEntity>; clip: string; readyAt: number }>()
+  for (const kind of [undefined, ...DAILY_ORBS]) {
+    const entity = engine.addEntity()
+    const clip = kind ? `assets/sounds/orb-pickup-${kind}.mp3` : B.sound
+    Transform.create(entity, { parent: engine.PlayerEntity })
+    AudioSource.create(entity, { audioClipUrl: clip, playing: false, loop: false, global: true, volume: B.volume })
+    pickupSounds.set(kind, { entity, clip, readyAt: 0 })
+  }
+  let volume: number = B.volume, time = 0, poppedTotal = 0
   let previousPlayer: Point | undefined, previousCanPop = false
   const pool = Array.from({ length: B.count }, (_, index) => {
     const entity = engine.addEntity(), billboard = engine.addEntity(), vortex = engine.addEntity()
@@ -34,13 +47,12 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
     Billboard.create(billboard, { billboardMode: BillboardMode.BM_ALL })
     Transform.create(vortex, { parent: billboard })
     MeshRenderer.setPlane(vortex)
-    Material.setPbrMaterial(vortex, { texture: Material.Texture.Common({ src: vortexTexture }),
-      albedoColor: Color4.White(), emissiveColor: Color3.create(1, 0.72, 0.22), emissiveIntensity: B.vortexEmission,
-      roughness: 1, castShadows: false, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND })
+    paintOrbOverlay(vortex, vortexTexture, 1)
     VisibilityComponent.create(entity, { visible: false })
     VisibilityComponent.create(billboard, { visible: false })
     VisibilityComponent.create(vortex, { visible: false })
-    return { entity, billboard, vortex, index, slot: slots[(index * 5) % slots.length],
+    return { entity, billboard, vortex, index, slot: bubbleSlot(index),
+      rare: undefined as RareOrb | undefined,
       mode: 'waiting' as 'waiting' | 'active' | 'popping',
       readyAt: 0.2 + index * 0.16, poppedAt: 0, glowAt: -Infinity,
       // A stable slot per orb keeps an orb index tied to the same world
@@ -55,7 +67,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
       emissiveColor: Color3.create(1, 0.38, 0.035), emissiveIntensity: 2.4,
       roughness: 0.15, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false })
     VisibilityComponent.create(entity, { visible: false })
-    return { entity, born: 0, materialAt: 0, origin: { x: 0, y: 0, z: 0 }, angle: 0, pitch: 0, burstSpeed: 0,
+    return { entity, rare: undefined as RareOrb | undefined, born: 0, materialAt: 0, origin: { x: 0, y: 0, z: 0 }, angle: 0, pitch: 0, burstSpeed: 0,
       radialSpeed: 0, spin: 0, riseSpeed: 0, phase: 0, size: 0.08, shade: 0, active: false,
       index, kind: 'idle' as 'idle' | 'burst' | 'orbit' | 'celebrate', orbitRadius: 0, orbitHeight: 0 }
   })
@@ -63,30 +75,56 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
   let nextSpark = B.accumulationCapacity
   let accumulationPops = 0
 
+  function paintOrb(item: typeof pool[number], opacity: number, scan: number, paintVortex: boolean) {
+    const kind = item.rare
+    const src = kind ? rareOrbTexture(kind) : vortexTexture
+    const texture = Material.Texture.Common({ src })
+    const tint = kind === 'blue' ? [.19, .65, 1] : kind === 'purple' ? [.72, .30, 1] :
+      kind === 'rainbow' ? [.20, .32, .82] : [1, .54 + scan * .16, .025 + scan * .055]
+    Material.setPbrMaterial(item.entity, {
+      albedoColor: Color4.create(tint[0], tint[1], tint[2], B.orbOpacity * opacity),
+      emissiveTexture: kind === 'rainbow' ? undefined : texture, emissiveColor: Color3.create(tint[0], tint[1], tint[2]),
+      emissiveIntensity: (kind === 'rainbow' ? .65 + scan * .25 : B.glowBaseIntensity + scan * B.glowScanIntensity) * opacity,
+      roughness: .08, metallic: .45, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND
+    })
+    if (paintVortex) paintOrbOverlay(item.vortex, src, opacity)
+  }
+
   function visible(item: typeof pool[number], value: boolean) {
     VisibilityComponent.getMutable(item.entity).visible = value
     VisibilityComponent.getMutable(item.billboard).visible = value
     VisibilityComponent.getMutable(item.vortex).visible = value
   }
   function wait(item: typeof pool[number], delay: number) {
-    item.mode = 'waiting'; item.readyAt = time + delay; visible(item, false)
+    item.mode = 'waiting'; item.rare = undefined; item.readyAt = time + delay; visible(item, false)
   }
-  function position(slot: typeof slots[number]): Point {
+  function position(slot: ReturnType<typeof bubbleSlot>): Point {
     const angle = slot.angle + time * B.orbitDegrees * Math.PI / 180
     return { x: ARENA.center.x + Math.cos(angle) * slot.radius,
       y: slot.y + Math.sin(time * 1.5 + slot.angle) * 0.2 * BUILD_SCALE, z: ARENA.center.z + Math.sin(angle) * slot.radius }
   }
+  const rainbow = [
+    [1, .18, .36], [1, .59, .16], [.87, 1, .19], [.2, 1, .54], [.18, .71, 1], [.66, .26, 1]
+  ] as const
+  function paintSpark(particle: typeof sparks[number], opacity: number, shimmer: number) {
+    const { rare, shade, index } = particle
+    const glow = rare === 'rainbow' ? rainbow[index % rainbow.length] :
+      rare === 'blue' ? [.06, .44 + shade * .32, 1] :
+        rare === 'purple' ? [.55 + shade * .3, .09 + shade * .15, 1] :
+          [1, .42 + shade * .42, .04 + shade * .22]
+    const tint = (value: number) => value + (1 - value) * .17
+    Material.setPbrMaterial(particle.entity, { albedoColor: Color4.create(tint(glow[0]), tint(glow[1]), tint(glow[2]), opacity),
+      emissiveColor: Color3.create(glow[0], glow[1], glow[2]),
+      emissiveIntensity: (5 + shade * 5) * shimmer * opacity, metallic: .76, roughness: .035,
+      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false })
+  }
   function showSpark(particle: typeof sparks[number]) {
     Transform.getMutable(particle.entity).scale = Vector3.create(particle.size * BUILD_SCALE, particle.size * BUILD_SCALE, particle.size * BUILD_SCALE)
-    const shade = particle.shade
-    Material.setPbrMaterial(particle.entity, { albedoColor: Color4.create(1, 0.58 + shade * 0.35, 0.12 + shade * 0.55, 1),
-      emissiveColor: Color3.create(1, 0.42 + shade * 0.42, 0.04 + shade * 0.22),
-      emissiveIntensity: 5 + shade * 5, metallic: 0.76, roughness: 0.035,
-      transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false })
+    paintSpark(particle, 1, 1)
     particle.active = true
     VisibilityComponent.getMutable(particle.entity).visible = true
   }
-  function emitSparks(origin: Point) {
+  function emitSparks(origin: Point, rare: RareOrb | undefined) {
     // Each pickup adds twelve motes to the current five-pickup cycle.
     const cohort = accumulationPops++ % B.accumulationEvery
     for (let i = 0; i < B.accumulationPerPop; i++) {
@@ -95,9 +133,10 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
       particle.kind = 'orbit'; particle.born = time; particle.origin = { ...origin }
       particle.angle = slot * Math.PI * 2 / B.accumulationCapacity
       particle.phase = random() * Math.PI * 2; particle.size = 0.105 + random() * 0.045
-      particle.shade = (i + cohort % 4) / 5
+      particle.shade = (i + cohort % 4) / (B.accumulationPerPop + 2)
       particle.orbitRadius = B.accumulationRadius + (slot % 3) * 0.42 * BUILD_SCALE
       particle.orbitHeight = ARENA.center.y + (3 + Math.floor(slot / 12) * 0.58) * BUILD_SCALE
+      particle.rare = rare
       showSpark(particle)
     }
     for (let i = 0; i < B.particlesPerPop; i++) {
@@ -117,6 +156,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
       particle.phase = random() * Math.PI * 2
       particle.size = 0.055 + (i % 3) * 0.025 + random() * 0.03
       particle.shade = (i % 4 + random()) / 4
+      particle.rare = rare
       showSpark(particle)
     }
   }
@@ -125,13 +165,13 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
     if (item.mode !== 'active') return false
     item.mode = 'popping'
     item.poppedAt = time - Math.max(0, (Date.now() - at) / 1000)
-    emitSparks(item.point)
+    emitSparks(item.point, item.rare)
     return true
   }
   const stopListening = onSharedObstacleEvent(event => {
     if (event.kind !== 'orb' || event.action !== 'pop') return
     const item = pool[event.index]
-    if (!item || item.mode === 'popping') return
+    if (!item || item.rare || item.mode === 'popping') return
     if (!popOrb(item, event.at)) pendingPops.set(event.index, event.at)
   })
 
@@ -159,14 +199,7 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
           vortexTransform.scale = Vector3.create(1 - fraction, 1 - fraction, 1)
           vortexTransform.rotation = Quaternion.fromEulerDegrees(0, 0,
             (time * B.vortexSpinDegrees + item.slot.angle * 180 / Math.PI) % 360)
-          Material.setPbrMaterial(item.entity, { albedoColor: Color4.create(1, 0.58, 0.03, B.orbOpacity * (1 - fraction)),
-            emissiveTexture: Material.Texture.Common({ src: vortexTexture }),
-            emissiveColor: Color3.create(1, 0.57, 0.12), emissiveIntensity: B.glowBaseIntensity * (1 - fraction),
-            roughness: 0.08, metallic: 0.45, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND })
-          Material.setPbrMaterial(item.vortex, { texture: Material.Texture.Common({ src: vortexTexture }),
-            albedoColor: Color4.create(1, 1, 1, 1 - fraction), emissiveColor: Color3.create(1, 0.72, 0.22),
-            emissiveIntensity: B.vortexEmission * (1 - fraction), roughness: 1, castShadows: false,
-            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND })
+          paintOrb(item, 1 - fraction, .25, true)
           continue
         }
         let spawned = false
@@ -182,17 +215,15 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
           spawned = true
           transform.scale = Vector3.create(B.radius * 2, B.radius * 2, B.radius * 2)
           vortexTransform.scale = Vector3.create(1, 1, 1)
-          Material.setPbrMaterial(item.entity, { albedoColor: Color4.create(1, 0.58, 0.03, B.orbOpacity),
-            emissiveTexture: Material.Texture.Common({ src: vortexTexture }),
-            emissiveColor: Color3.create(1, 0.57, 0.12), emissiveIntensity: B.glowBaseIntensity,
-            roughness: 0.08, metallic: 0.45, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND })
-          Material.setPbrMaterial(item.vortex, { texture: Material.Texture.Common({ src: vortexTexture }),
-            albedoColor: Color4.White(), emissiveColor: Color3.create(1, 0.72, 0.22), emissiveIntensity: B.vortexEmission,
-            roughness: 1, castShadows: false, transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND })
+          item.rare = rollRareOrb(rarityRandom())
+          const overlayScale = B.vortexScale * (item.rare === 'rainbow' ? 1.35 : 1)
+          Transform.getMutable(item.billboard).scale = Vector3.create(overlayScale, overlayScale, 1)
+          item.point = spawnPoint
+          paintOrb(item, 1, .25, true)
           visible(item, true)
           const pendingAt = pendingPops.get(item.index)
           if (pendingAt !== undefined) {
-            popOrb(item, pendingAt)
+            if (!item.rare) popOrb(item, pendingAt)
             pendingPops.delete(item.index)
           }
         }
@@ -205,23 +236,23 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
         if (time - item.glowAt >= B.glowUpdateInterval) {
           item.glowAt = time
           const scan = (Math.sin(time * 3.2 - item.slot.angle * 2.5) + 1) * 0.5
-          Material.setPbrMaterial(item.entity, { albedoColor: Color4.create(1, 0.54 + scan * 0.16, 0.025 + scan * 0.055, B.orbOpacity),
-            emissiveTexture: Material.Texture.Common({ src: vortexTexture }),
-            emissiveColor: Color3.create(1, 0.42 + scan * 0.38, 0.045 + scan * 0.15),
-            emissiveIntensity: B.glowBaseIntensity + scan * B.glowScanIntensity, roughness: 0.08, metallic: 0.45,
-            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND })
+          paintOrb(item, 1, scan, false)
         }
-        if (!canPop || teleported || !player || !playerBefore || spawned ||
+        if (item.mode !== 'active' || !canPop || teleported || !player || !playerBefore || spawned ||
           !sweptBubbleContact(playerBefore, player, bubbleBefore, item.point)) continue
         const amount = lift.pop(time, velocityY, mobile)
         popOrb(item, Date.now())
-        publishSharedObstacleEvent('orb', item.index, 'pop')
+        // Rarity is rolled locally, so another player's gold pickup must never consume a rare drop.
+        if (!item.rare) publishSharedObstacleEvent('orb', item.index, 'pop')
         poppedTotal++
+        const keepCollecting = onPickup?.(item.rare, item.index)
         impulse += amount ?? 0
-        if (volume > 0 && time >= soundReadyAt) {
-          AudioSource.playSound(sound, B.sound, true)
-          soundReadyAt = time + B.soundInterval
+        const sound = pickupSounds.get(item.rare)!
+        if (volume > 0 && time >= sound.readyAt) {
+          AudioSource.playSound(sound.entity, sound.clip, true)
+          sound.readyAt = time + B.soundInterval
         }
+        if (keepCollecting === false) break
       }
       for (const particle of sparks) {
         if (!particle.active) continue
@@ -252,24 +283,22 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
         Transform.getMutable(particle.entity).scale = Vector3.create(size, size, size)
         if (time - particle.materialAt >= B.particleMaterialInterval) {
           particle.materialAt = time
-          const shade = particle.shade
-          Material.setPbrMaterial(particle.entity, { albedoColor: Color4.create(1, 0.58 + shade * 0.35,
-            0.12 + shade * 0.55, 1 - fraction),
-            emissiveColor: Color3.create(1, 0.42 + shade * 0.42, 0.04 + shade * 0.22),
-            emissiveIntensity: (5 + shade * 5) * shimmer * (1 - fraction), metallic: 0.76, roughness: 0.035,
-            transparencyMode: MaterialTransparencyMode.MTM_ALPHA_BLEND, castShadows: false })
+          paintSpark(particle, 1 - fraction, shimmer)
         }
       }
       return impulse
     },
     setVolume(value: number) {
       volume = Math.max(0, Math.min(1, value))
-      AudioSource.getMutable(sound).volume = volume
-      if (volume === 0) AudioSource.stopSound(sound, true)
+      for (const { entity } of pickupSounds.values()) {
+        AudioSource.getMutable(entity).volume = volume
+        if (volume === 0) AudioSource.stopSound(entity, true)
+      }
     },
-    resetAccumulation() {
+    resetAccumulation(keepBursts = false) {
       accumulationPops = 0
       for (const particle of sparks) {
+        if (keepBursts && particle.kind === 'burst') continue
         particle.active = false
         particle.kind = 'idle'
         VisibilityComponent.getMutable(particle.entity).visible = false
@@ -279,7 +308,9 @@ export function createRecoveryBubbles(_blocked: (point: Point, radius: number) =
       // Wrap the real player in three strands of miniature golden spheres.
       for (let i = 0; i < sparks.length; i++) {
         const particle = sparks[i]
+        if (particle.active && particle.kind === 'burst') continue
         particle.born = time
+        particle.rare = undefined
         particle.kind = 'celebrate'
         particle.origin = { ...player }
         particle.phase = (i % 17) * 0.17

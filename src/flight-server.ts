@@ -1,3 +1,4 @@
+import { startDailyOrbServer } from './daily-orb-server'
 import { engine, PlayerIdentityData, Transform } from '@dcl/sdk/ecs'
 import { Storage } from '@dcl/sdk/server'
 import { FlightAuthority } from './authority-core'
@@ -25,6 +26,7 @@ function rockTouch(position: Point) {
   })
 }
 export function startFlightServer() {
+  startDailyOrbServer()
   const game=new FlightAuthority({get:()=>Storage.get<string>(KEY),set:value=>Storage.set(KEY,value),
     getPlayer:id=>Storage.player.get<string>(id,PERSONAL_KEY),setPlayer:(id,value)=>Storage.player.set(id,PERSONAL_KEY,value)})
   void game.load().then(()=>console.log(game.ready?'Flight server: persistent records loaded':'Flight server: storage unavailable; retrying'))
@@ -32,6 +34,9 @@ export function startFlightServer() {
     if (!context || data.name.length>128) return
     // Wallet identity comes exclusively from the server's authenticated message context.
     game.input(context.from.toLowerCase(),data.supported,data.focused,data.name,Date.now(),data.rockTouch)
+  })
+  flightRoom.onMessage('bonusOrbPickup', (data, context) => {
+    if (context) game.bonusOrbPickup(context.from.toLowerCase(), data.kind, data.slot, Date.now())
   })
   let clock=0,broadcast=0,retry=0
   const connected=new Set<string>()

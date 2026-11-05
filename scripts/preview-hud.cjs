@@ -12,6 +12,9 @@ function snapshot(width,height,seconds,mobile){
  new Function('exports',ts.transpileModule(fs.readFileSync(path.join(root,'src/flight-ranks.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(rankMod.exports)
  modules['./flight-ranks']=rankMod.exports
  modules['./orb-reward']={ORB_REWARD:{every:5}}
+ const dailyMod={exports:{}}
+ new Function('exports',ts.transpileModule(fs.readFileSync(path.join(root,'src/daily-orbs.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(dailyMod.exports)
+ modules['./daily-orbs']=dailyMod.exports
  const tutorialMod={exports:{}}
  const tutorialCode=ts.transpileModule(fs.readFileSync(path.join(root,'src/tutorial.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,jsxFactory:'ReactEcs.createElement'}}).outputText
  new Function('require','module','exports',tutorialCode)(n=>modules[n],tutorialMod,tutorialMod.exports)
@@ -20,7 +23,7 @@ function snapshot(width,height,seconds,mobile){
  const code=ts.transpileModule(fs.readFileSync(path.join(root,'src/airtime-ui.tsx'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020,jsx:ts.JsxEmit.React,jsxFactory:'ReactEcs.createElement'}}).outputText
  new Function('require','module','exports',code)(n=>modules[n],m,m.exports)
  const {display,setupAirtimeUi}=m.exports
- Object.assign(display,{touchControls:mobile,bestLoaded:true,time:seconds,best:'142.38',state:'Airborne',energy:65,altitude:'65.0',altitudeMeters:65,orbs:3,localUser:'local',
+ Object.assign(display,{touchControls:mobile,bestLoaded:true,time:seconds,best:'142.38',state:'Airborne',energy:65,altitude:'65.0',altitudeMeters:65,orbs:3,dailyOrbs:{pickups:{blue:['a','b'],purple:['c'],rainbow:[]}},localUser:'local',
  rows:['Nova','Kael','You','Lume','Orin'].map((name,i)=>({rank:i+1,userId:i===2?'local':'fixture'+i,name,airtime:(142.38-i*15).toFixed(2)+'s'}))})
  setupAirtimeUi();const walk=n=>[n,...n.children.flatMap(walk)];walk(render()).find(n=>n.props.key==='skip').props.onMouseDown();update(.06)
  if(Number(seconds)%10!==0){update(.45);update(.45)}

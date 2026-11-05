@@ -105,3 +105,7 @@ Flight feedback now triggers immediately on local lava contact and stays centere
 
 
 The sphere reward provides a roughly 9–10 second rest ascent toward the vortex crown. A translation-only camera rig captures the front angle once, tracks the rising avatar smoothly and never inherits joystick-driven yaw. During the shot lateral movement is paused and the touch joystick is hidden, while jump/glide settings remain intact. Camera, input and touch controls are explicitly restored on completion or interruption; airborne momentum and a slight off-center exit are retained.
+
+Rare spheres appear among normal recovery spheres: blue (15% per spawn), purple (5%), and rainbow (1%). Rare drops are personal, so another player collecting a gold sphere cannot remove your rare drop. All colors count toward the five-sphere teleport. The personal Daily Orbs board tracks 5 blue, 3 purple, and 1 rainbow; progress saves by wallet and resets at midnight UTC. The teleport starts slightly off center, inside the visible blue updraft.
+
+The in-world Vortex Leaderboard stands near the north edge of the arena, facing the vortex. It shows the ten best completed flights from the scene's saved records and updates after the server confirms a save.

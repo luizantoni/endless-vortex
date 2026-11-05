@@ -8,7 +8,8 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   new Function('exports',ts.transpileModule(fs.readFileSync('src/flight-ranks.ts','utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(rankMod.exports)
   const imports = {
  './flight-ranks':rankMod.exports,
- './orb-reward':{ORB_REWARD:{every:5}},
+ './daily-orbs':require('../src/daily-orbs.ts'),
+ './orb-reward':require('../src/orb-reward.ts'),
  '@dcl/sdk/react-ecs': { __esModule: true, default: react, UiEntity: 'entity', ReactEcsRenderer: {
       setUiRenderer: (f, options) => { render = f; rendererOptions = options }
     } },
@@ -33,6 +34,7 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   setupAirtimeUi({onRank:()=>rankSounds++,onNewRecord:()=>recordSounds++})
   assert.deepEqual(rendererOptions, { virtualWidth: 0, virtualHeight: 0, screenInset: 'none' },
     'pixel-positioned HUD opts out of SDK scaling and applies insets once')
+  display.dailyOrbs = { day: '2026-11-04', pickups: { blue: ['a','b'], purple: ['c'], rainbow: [] } }
   display.orbs = 3
   display.bestLoaded=true; display.best = '12.50'; display.state = 'Finished · floor pad · move to restart'
   display.rows = Array.from({length:5},(_,i)=>({rank:i+1,userId:'avatar'+i,name:'Runner',airtime:'12480.000s'}))
@@ -59,6 +61,9 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
       const src=n.props.uiBackground?.texture?.src
       if(src) { assert.ok(fs.existsSync(src)); assert.ok(!src.endsWith('eternal-vortex-hud.png')) }
     }
+    const daily = find(tree, 'hud-daily-orbs')
+    assert.deepEqual(walk(daily).flatMap(n => n.props.uiText ? [n.props.uiText.value] : []),
+      ['DAILY ORBS', '2/5', '1/3', '0/1'])
     const panel=find(tree,'hud-sidebar'), orb=find(tree,'hud-orbs'), guide=find(panel,'reopen')
     assert.ok(panel && orb && guide)
     const altitude=find(tree,'hud-altitude')
@@ -180,7 +185,14 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
       'mobile leaderboard is smaller than the desktop layout')
     assert.ok(pb.position.left >= tb.position.left + tb.width || pb.position.top >= tb.position.top + tb.height,
       'mobile timer clears the leaderboard in either orientation')
-    for (const bounds of [tb, pb, ob, ab]) {
+    const daily = find(tree, 'hud-daily-orbs').props.uiTransform
+    for (const card of [tb, pb, ob, ab]) {
+      assert.ok(daily.position.left + daily.width <= card.position.left ||
+        card.position.left + card.width <= daily.position.left ||
+        daily.position.top + daily.height <= card.position.top ||
+        card.position.top + card.height <= daily.position.top, 'daily board clears other mobile cards')
+    }
+    for (const bounds of [tb, pb, ob, ab, daily]) {
       assert.ok(bounds.position.left >= 20 && bounds.position.top >= 8)
       assert.ok(bounds.position.left + bounds.width <= width - 12)
       assert.ok(bounds.position.top + bounds.height <= height - 10)
@@ -246,9 +258,58 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
   assert.equal(find(render(),'rank-achievement'),undefined,'rank award expires after two seconds')
   display.time='0.000';display.rewardTransition=true;update(.06)
   assert.equal(render().props.key,'reward-cinematic','reward camera has a clear screen')
-  assert.equal(walk(render()).filter(n=>n.props.uiText || n.props.uiBackground).length,0,'no orb, number or HUD obscures the avatar')
-  display.rewardTransition=false;update(.06)
+  assert.equal(walk(render()).filter(n=>n.props.uiText || n.props.uiBackground).length,0,'the handshake does not show rest text prematurely')
+  display.rewardCelebration++;update(.06)
+  const flash = find(render(),'orb-reward-flash')
+  assert.equal(flash.props.uiTransform.width,size.width)
+  assert.equal(flash.props.uiTransform.height,size.height)
+  const peak = flash.props.uiBackground.color.a
+  assert.ok(peak > .25 && peak < .5, 'the scene remains visible through the flash')
+  const vortex = find(flash, 'orb-flash-vortex')
+  assert.ok(vortex.props.uiBackground.texture.src.endsWith('flash-vortex.png'))
+  assert.ok(fs.existsSync(vortex.props.uiBackground.texture.src))
+  update(.24)
+  assert.ok(find(render(),'orb-reward-flash').props.uiBackground.color.a < peak)
+  assert.notDeepEqual(find(render(),'orb-flash-vortex').props.uiBackground.uvs, vortex.props.uiBackground.uvs,
+    'the overlay advances to a rotated sprite frame')
+  update(.26)
+  assert.equal(find(render(),'orb-reward-flash'),undefined,'the unlock flash plays once and clears')
+  display.rewardSeconds=9.2;update(.06)
+  const rest = find(render(),'rest-message')
+  const bounds = rest.props.uiTransform, insets = size.screenInsetArea ?? { left: 0, right: 0, top: 0, bottom: 0 }
+  assert.equal(bounds.position.left + bounds.width / 2, (size.width + insets.left - insets.right) / 2)
+  assert.equal(bounds.position.top + bounds.height / 2, (size.height + insets.top - insets.bottom) / 2)
+  assert.ok(walk(rest).some(n=>n.props.uiBackground?.texture?.src.endsWith('heading-rest-cinematic.png')))
+  assert.equal(walk(find(rest,'rest-countdown')).filter(n=>n.props.uiBackground).length,2)
+  const normalDigitHeight = find(rest,'rest-countdown').props.uiTransform.height
+  display.rewardSeconds=3.98;update(.06)
+  const finalCountdown = find(render(),'rest-countdown')
+  const finalDigits = walk(finalCountdown).filter(n=>n.props.uiBackground)
+  assert.equal(finalDigits.length,1)
+  assert.ok(finalDigits[0].props.uiBackground.texture.src.endsWith('digits-gold.png'))
+  assert.ok(finalCountdown.props.uiTransform.height > normalDigitHeight, 'the final beats pulse larger')
+  assert.equal(find(render(),'hud-orbs'),undefined,'the usual HUD stays hidden during the rest')
+  display.rewardFlashHold=true;display.rewardCelebration++
+  const returnPeak = find(render(),'orb-reward-flash').props.uiBackground.color.a
+  assert.ok(returnPeak > .25 && returnPeak < .5,'return flash begins translucent even before the next UI tick')
+  display.rewardTransition=false;display.rewardSeconds=undefined;update(.40)
+  assert.equal(find(render(),'rest-message'),undefined)
+  assert.equal(find(render(),'orb-reward-flash').props.uiBackground.color.a,returnPeak,'vortex flash persists through the native camera blend')
+  update(.26)
+  assert.ok(find(render(),'orb-reward-flash').props.uiBackground.color.a < returnPeak)
+  update(.18)
   assert.ok(find(render(),'hud-orbs'),'HUD returns after the cinematic')
+  display.rewardFlashHold=false
+  display.rewardTransition = true; display.rewardSeconds = 7; display.rewardBonus = 48
+  display.rewardOrbKinds = ['blue', undefined, 'purple', undefined, undefined]
+  update(.1)
+  const equation = find(render(),'rest-bonus-math')
+  assert.deepEqual(walk(equation).flatMap(n => n.props.uiText ? [n.props.uiText.value] : []),
+    ['10s', '+', '6s', '+', '20s', '+', '6s', '+', '6s'])
+  assert.ok(walk(find(render(),'rest-airtime-bonus')).some(n => n.props.uiText?.value === '= 48s BONUS'))
+  assert.equal(walk(equation).filter(n => /^rest-orb-/.test(n.props.key || '')).length,5)
+  display.rewardTransition = false; display.rewardSeconds = undefined; display.rewardBonus = 0; display.rewardOrbKinds = []
+  update(.1)
   const assertPlain = popup => {
     assert.ok(popup)
     assert.ok(!walk(popup).some(n=>n.props.uiBackground?.color || /frame|vignette/.test(n.props.uiBackground?.texture?.src||'')),
@@ -346,8 +407,20 @@ test('modular HUD reserves native corners, clips no panel, and bounds milestone 
     assert.equal(mod.exports.rankAchievementOverlay(1280,720,1,age).props.uiTransform.opacity,opacity(age))
   }
 
+  display.orbs = 2
+  display.orbKinds = ['blue', 'purple']
+  update(.1)
+  for (const [i, kind, bonus] of [[0, 'blue', '+10s'], [1, 'purple', '+20s']]) {
+    const slot = find(render(), 'orb-tick-' + i)
+    assert.ok(walk(slot).some(node => node.props.uiBackground?.texture?.src.endsWith('orb-' + kind + '.png')))
+    assert.equal(find(slot, 'orb-bonus-' + i).props.uiText.value, bonus)
+  }
   find(render(),'reopen').props.onMouseDown();update(.1)
   display.resultEvent={id:99,milliseconds:12345,record:false,valid:true,saved:false,provisional:true};update(.1)
-  assert.ok(find(render(),'flight-result'),'the central result is visible even when the flight guide is open')
+  assert.equal(find(render(),'flight-result'),undefined,'the result cannot overlap the open guide')
+  for(let i=0;i<10;i++)update(.25)
+  assert.equal(find(render(),'flight-result'),undefined)
+  find(render(),'skip').props.onMouseDown();update(.1)
+  assert.ok(find(render(),'flight-result'),'the deferred result appears when the guide closes')
 
 })

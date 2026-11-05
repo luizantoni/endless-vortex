@@ -112,10 +112,10 @@ test('failed personal-best writes remain pending and retry before the shared boa
 })
 
 
-test('low-center sphere reward preserves authoritative airtime through two teleports and normal play afterward',async()=>{
+test('off-center sphere reward preserves authoritative airtime through two teleports and normal play afterward',async()=>{
  const {ORB_REWARD,isOrbRewardDestination}=require('../src/orb-reward.ts')
  const {game,step}=fixture({get:async()=>null,set:async()=>true});await game.load()
- const launch={...ARENA.center,y:ORB_REWARD.height}
+ const launch={...ARENA.center,x:ARENA.center.x+.9,y:ORB_REWARD.height}
  assert.ok(launch.y>ARENA.floorTop+2,'launch never touches lava')
  assert.equal(isOrbRewardDestination(launch),true)
  assert.equal(isOrbRewardDestination({...launch,x:launch.x+5}),false)
@@ -127,17 +127,30 @@ test('low-center sphere reward preserves authoritative airtime through two telep
    step('reward',launch)
    for(let i=1;i<=56;i++)step('reward',{...launch,y:launch.y+i*.3})
    assert.equal(game.snapshot('reward').result,undefined,'reward relocation does not end the flight')
-   assert.ok(game.snapshot('reward').milliseconds>before,'airtime runs throughout the lift')
+   assert.equal(game.snapshot('reward').milliseconds-before,57*50+30000,'airtime and exactly one 30-second bonus count per reward teleport')
    for(let i=1;i<=15;i++)step('reward',{...launch,x:40+i*.2,y:launch.y+16.8})
    assert.equal(game.snapshot('reward').phase,'airborne','normal movement continues after the shot')
  }
- for(let y=23;y<=ARENA.height-4;y++)step('reward',{...lava,y})
+ for(let y=Math.ceil(launch.y+16.8);y<=ARENA.height-4;y++)step('reward',{...lava,y})
  assert.equal(game.snapshot('reward').phase,'airborne','flight continues within the scene ceiling')
  const beforeLanding=game.snapshot('reward').milliseconds
  for(let y=ARENA.height-4;y>lava.y;y-=1)step('reward',{...lava,y})
  step('reward',lava)
  assert.equal(game.snapshot('reward').phase,'finished')
- assert.ok(game.snapshot('reward').result.milliseconds>=beforeLanding,'a later real landing still saves the run')
+ const landed = game.snapshot('reward')
+ assert.ok(landed.result.milliseconds>=beforeLanding,'a later real landing still saves the run')
+ assert.equal(landed.rows[0].airtimeMs,landed.result.milliseconds,'the leaderboard keeps the bonuses')
+})
+
+test('ordinary flight through the reward destination does not earn a bonus', async () => {
+ const { ORB_REWARD } = require('../src/orb-reward.ts')
+ const { game, step } = fixture({get:async()=>null,set:async()=>true}); await game.load()
+ const launch = {...ARENA.center,x:ARENA.center.x+1,y:ORB_REWARD.height}
+ const start = {...launch,x:launch.x+10}
+ for(let i=0;i<20;i++) step('flyby',start)
+ const before=game.snapshot('flyby').milliseconds
+ for(let i=1;i<=20;i++) step('flyby',{...start,x:start.x-i*.5})
+ assert.equal(game.snapshot('flyby').milliseconds-before,1000)
 })
 
 test('leaves and other support preserve airtime; only entering blue lava completes the run',async()=>{
@@ -152,4 +165,73 @@ test('leaves and other support preserve airtime; only entering blue lava complet
  step('alice',lava)
  assert.equal(game.snapshot('alice').phase,'finished')
  assert.equal(game.snapshot('alice').result.milliseconds,before)
+})
+
+test('airtime keeps counting above the updraft while the player is over the arena', async () => {
+ const {game,step}=fixture({get:async()=>null,set:async()=>true});await game.load()
+ for(let i=0;i<20;i++)step('high',air)
+ const before=game.snapshot('high').milliseconds
+ let frames=0
+ for(let y=air.y+1;y<=ARENA.height+45;y++){step('high',{...air,y});frames++}
+ assert.equal(game.snapshot('high').phase,'airborne')
+ assert.equal(game.snapshot('high').milliseconds-before,frames*50)
+ const edge={x:ARENA.center.x+ARENA.radius,y:ARENA.height+45,z:ARENA.center.z}
+ for(let x=air.x+1;x<=edge.x;x++)step('high',{...edge,x})
+ const atEdge=game.snapshot('high').milliseconds
+ step('high',{...edge,x:edge.x+1})
+ assert.equal(game.snapshot('high').phase,'paused')
+ assert.equal(game.snapshot('high').milliseconds,atEdge)
+})
+
+test('airtime counts during free fall even when the client reports its pointer unlocked',async()=>{
+ const {game,step}=fixture({get:async()=>null,set:async()=>true});await game.load()
+ for(let i=0;i<20;i++)step('drop',{...air,y:90})
+ const before=game.snapshot('drop').milliseconds
+ for(let i=1;i<=18;i++)step('drop',{...air,y:90-i*4.5},{focused:false})
+ const after=game.snapshot('drop')
+ assert.equal(after.phase,'airborne')
+ assert.equal(after.milliseconds-before,900)
+})
+
+test('the rainbow rest awards one minute and includes it in the completed score',async()=>{
+ const {randomOrbRewardDestination}=require('../src/orb-reward.ts')
+ const {game,step}=fixture({get:async()=>null,set:async()=>true});await game.load()
+ const rainbow=randomOrbRewardDestination(()=>.5,'rainbow')
+ for(let i=0;i<20;i++)step('prism',{...air,x:air.x+16,y:rainbow.y})
+ const before=game.snapshot('prism').milliseconds
+ step('prism',rainbow)
+ for(let i=0;i<4;i++)step('prism',rainbow)
+ assert.equal(game.snapshot('prism').milliseconds-before,60250)
+ for(let y=rainbow.y-1;y>lava.y;y--)step('prism',{...rainbow,y})
+ step('prism',lava)
+ const landed=game.snapshot('prism')
+ assert.equal(landed.result.valid,true)
+ assert.ok(landed.result.milliseconds>=60000)
+ assert.equal(landed.rows[0].airtimeMs,landed.result.milliseconds)
+})
+
+test('blue and purple bonuses bank until five-orb rest, then enter the saved score',async()=>{
+ const {bubbleSlot}=require('../src/bubble-rules.ts')
+ const {randomOrbRewardDestination}=require('../src/orb-reward.ts')
+ const {game,step}=fixture({get:async()=>null,set:async()=>true});await game.load()
+ const pointFor=slot=>{const lane=bubbleSlot(slot);return {...ARENA.center,x:ARENA.center.x+lane.radius,y:lane.y}}
+ const point=pointFor(0)
+ for(let i=0;i<20;i++)step('bonus',point)
+ const before=game.snapshot('bonus').milliseconds
+ const now=Date.now()+1000
+ assert.equal(game.bonusOrbPickup('bonus','blue',0,now),true)
+ assert.equal(game.bonusOrbPickup('bonus','purple',0,now+20),false)
+ assert.equal(game.bonusOrbPickup('bonus','purple',-1,now+20),false)
+ assert.equal(game.snapshot('bonus').milliseconds,before)
+ const next=pointFor(1)
+ for(let i=1;i<=20;i++)step('bonus',{...point,x:point.x+(next.x-point.x)*i/20,y:point.y+(next.y-point.y)*i/20})
+ const purpleBefore=game.snapshot('bonus').milliseconds
+ assert.equal(game.bonusOrbPickup('bonus','purple',1,now+1000),true)
+ assert.equal(game.snapshot('bonus').milliseconds,purpleBefore)
+ const rest=randomOrbRewardDestination(()=>.5)
+ step('bonus',rest)
+ assert.equal(game.snapshot('bonus').milliseconds-purpleBefore,48050)
+ for(let y=rest.y-1;y>lava.y;y--)step('bonus',{...rest,y})
+ step('bonus',lava)
+ assert.ok(game.snapshot('bonus').rows[0].airtimeMs>=48000)
 })

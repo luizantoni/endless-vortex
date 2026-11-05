@@ -58,7 +58,7 @@ export function vortexForce(position: Position): Position | undefined {
 
 // Tangential rotation is kept separate so it can run without restoring the strong
 // inward pull or the extra vertical lift from the original prototype force.
-export function rotationForce(position: Position): Position | undefined {
+export function rotationForce(position: Position, spin = 1): Position | undefined {
   if (!AIRFLOW.rotationEnabled || position.y < AIRFLOW.forceMinY || position.y > AIRFLOW.height) return undefined
   const offsetX = position.x - AIRFLOW.center.x
   const offsetZ = position.z - AIRFLOW.center.z
@@ -68,8 +68,8 @@ export function rotationForce(position: Position): Position | undefined {
     Math.max(1 - (distance - AIRFLOW.radius) / (AIRFLOW.rotationOuterRadius - AIRFLOW.radius), 0)
   if (spinFactor <= 0) return undefined
   return {
-    x: offsetZ === 0 ? 0 : -(offsetZ / distance) * AIRFLOW.spin * spinFactor,
+    x: offsetZ === 0 ? 0 : -(offsetZ / distance) * AIRFLOW.spin * spinFactor * spin,
     y: 0,
-    z: offsetX === 0 ? 0 : (offsetX / distance) * AIRFLOW.spin * spinFactor
+    z: offsetX === 0 ? 0 : (offsetX / distance) * AIRFLOW.spin * spinFactor * spin
   }
 }

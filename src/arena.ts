@@ -16,6 +16,11 @@ export function scalePoint(point: Point): Point {
 }
 
 export function insideArena(point: Point, maxHeight = ARENA.height + 1): boolean {
-  return point.y >= 0 && point.y <= maxHeight &&
+  return point.y <= maxHeight && insideFlightColumn(point)
+}
+
+// The updraft has a fixed height, but an airborne player can coast above it.
+export function insideFlightColumn(point: Point): boolean {
+  return Number.isFinite(point.y) && point.y >= 0 &&
     Math.hypot(point.x - ARENA.center.x, point.z - ARENA.center.z) <= ARENA.radius
 }

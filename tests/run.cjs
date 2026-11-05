@@ -32,3 +32,7 @@ require('./flight-feedback.test.cjs')
 require('./orb-cinematic.test.cjs')
 
 require('./orb-reward.test.cjs')
+
+require('./daily-orbs.test.cjs')
+
+require('./vortex-reversal.test.cjs')

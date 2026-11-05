@@ -1,3 +1,16 @@
+import type { Point } from './arena'
+
+// A fast vertical fall can exceed the ordinary movement threshold between
+// samples, especially right after the glider closes.
+export function isFlightDiscontinuity(previous: Point | undefined, current: Point | undefined, dt: number, threshold: number): boolean {
+  if (!previous || !current) return false
+  const horizontal = Math.hypot(current.x - previous.x, current.z - previous.z)
+  const vertical = current.y - previous.y
+  const downwardAllowance = Math.max(threshold, 1 + 90 * Math.min(.5, Math.max(0, dt)))
+  if (vertical < 0 && horizontal <= threshold && -vertical <= downwardAllowance) return false
+  return Math.hypot(horizontal, vertical) > threshold
+}
+
 export type AirSample = {
   dt: number; wallDt: number; now: number; inside: boolean; connected: boolean
   floor: boolean; supported: boolean; moved: boolean; teleported: boolean
@@ -51,6 +64,11 @@ export class Airtime {
     if (this.phase === 'airborne') this.seconds += Math.min(s.dt, s.wallDt)
     this.phase = 'airborne'; this.reason = 'Airborne'
     return false
+  }
+  addBonus(seconds: number): boolean {
+    if ((this.phase !== 'airborne' && this.phase !== 'paused') || !Number.isFinite(seconds) || seconds <= 0) return false
+    this.seconds += seconds
+    return true
   }
   get milliseconds(): number { return Math.floor(this.seconds * 1000 + 1e-6) }
 }

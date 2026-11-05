@@ -54,3 +54,13 @@ test('observed airborne seconds are frame-rate independent and retain the starti
   assert.equal(run.milliseconds,2000);assert.equal(run.day,'2026-09-08')
  }
 })
+
+test('a fast glider-off descent is continuous movement; large upward or sideways jumps still interrupt',()=>{
+ const {isFlightDiscontinuity}=require('../src/airtime.ts')
+ const start={x:40,y:90,z:40}
+ assert.equal(isFlightDiscontinuity(start,{...start,y:85},.05,4),false)
+ assert.equal(isFlightDiscontinuity(start,{...start,y:80},.12,8),false)
+ assert.equal(isFlightDiscontinuity(start,{...start,y:40},.05,4),true)
+ assert.equal(isFlightDiscontinuity(start,{...start,y:100},.05,4),true)
+ assert.equal(isFlightDiscontinuity(start,{...start,x:52,y:85},.05,4),true)
+})

@@ -1,7 +1,12 @@
+import { vortexReversalAt } from './vortex-reversal'
+import { isBonusOrb, orbSetPieceSeconds } from './daily-orbs'
+import { createGliderBillboard, createWorldLeaderboard } from './world-leaderboard'
+import { createDailyOrbClient } from './daily-orb-client'
+import { createUpdraftVisuals } from './updraft-visuals'
 import { presentFlightResult, presentLanding } from './flight-feedback'
 import { isServer as serverRole } from '~system/EngineApi'
 import { startFlightServer } from './flight-server'
-import { authoritativeFlight, startFlightClient, sendFlightInput } from './flight-client'
+import { authoritativeFlight, startFlightClient, sendFlightInput, sendBonusOrbPickup } from './flight-client'
 import { clearForTakeoff, touchingLava } from './lava-contact'
 import { heldGlideBrake } from './glide-assist'
 import { Animator, AudioSource, AvatarLocomotionSettings, ColliderLayer, engine, Entity, GltfContainer, InputModifier, InputAction, inputSystem, Physics, PointerLock, RaycastQueryType, raycastSystem, RealmInfo, TouchScreenControls, Transform } from '@dcl/sdk/ecs'
@@ -11,14 +16,14 @@ import { getPlayer } from '@dcl/sdk/players'
 import * as Runtime from '~system/Runtime'
 import * as Environment from '~system/EnvironmentApi'
 import { AIRFLOW, inWindArea, liftFor, rotationForce } from './vortex'
-import { Airtime, FloorContactLatch } from './airtime'
+import { Airtime, FloorContactLatch, isFlightDiscontinuity } from './airtime'
 import { createLandingPlatforms, LANDINGS } from './landing-platforms'
 import { display, setupAirtimeUi } from './airtime-ui'
 import { TUNING } from './tuning'
-import { ARENA, BUILD_SCALE, insideArena } from './arena'
+import { ARENA, BUILD_SCALE, insideArena, insideFlightColumn } from './arena'
 import { createRecoveryBubbles } from './bubbles'
 import { createOrbCinematic } from './orb-cinematic'
-import { ORB_REWARD, orbsSinceReset, orbTeleportResponseAccepted, orbRewardArrivalStatus } from './orb-reward'
+import { ORB_REWARD, orbTeleportResponseAccepted, orbRewardArrivalStatus, randomOrbRewardDestination, orbRewardBonus, orbRewardForPickups, OrbRewardKind } from './orb-reward'
 import { ScenePlayers } from './scene-players'
 import { createRockField } from './rock-field'
 import { RockRecovery } from './rock-recovery'
@@ -37,6 +42,8 @@ export async function main() {
   // Await the runtime role instead of racing the SDK's initially-false role cache.
   if ((await serverRole({})).isServer) { startFlightServer(); return }
   startFlightClient()
+  createWorldLeaderboard(() => authoritativeFlight.state)
+  createGliderBillboard()
   // Restore the client's normal steering, jump and glider behavior.
   InputModifier.deleteFrom(engine.PlayerEntity)
   AvatarLocomotionSettings.deleteFrom(engine.PlayerEntity)
@@ -82,6 +89,8 @@ export async function main() {
     invisibleMeshesCollisionMask: ColliderLayer.CL_NONE
   })
   Animator.createOrReplace(environment, { states: [{ clip: 'Animation', playing: true, loop: true, speed: 1 }] })
+  let reversal = vortexReversalAt(Date.now())
+  const windLayers: { entity: Entity; baseSpeed: number; speed: number }[] = []
   const existingWind = models.filter(([, model]) => model.src === windSource).map(([entity]) => entity)
   const plantsTransform = Transform.get(environment)
   for (let layer = 0; layer < 3; layer++) {
@@ -96,10 +105,13 @@ export async function main() {
       rotation: { ...plantsTransform.rotation }, scale: { ...plantsTransform.scale } })
     GltfContainer.createOrReplace(wind, { src: windSource,
       visibleMeshesCollisionMask: ColliderLayer.CL_NONE, invisibleMeshesCollisionMask: ColliderLayer.CL_NONE })
-    Animator.createOrReplace(wind, { states: [{ clip: 'Animation', playing: true, loop: true, speed: animationSpeed }] })
+    const speed = animationSpeed * reversal.spin
+    windLayers.push({ entity: wind, baseSpeed: animationSpeed, speed })
+    Animator.createOrReplace(wind, { states: [{ clip: 'Animation', playing: true, loop: true, speed, shouldReset: false }] })
   }
   createBlueLavaVortex()
   createVortexEntryCues()
+  createUpdraftVisuals(() => reversal)
 
   const music = engine.addEntity()
   Transform.create(music, { parent: engine.PlayerEntity })
@@ -121,39 +133,62 @@ export async function main() {
   const zones = AIRFLOW.zones.map(zone => ({ zone, source: engine.addEntity(), strength: 0 }))
   const platforms = createLandingPlatforms()
   const rocks = createRockField()
-  const bubbles = createRecoveryBubbles(platforms.overlaps)
+  const dailyOrbs = createDailyOrbClient()
+  let rainbowRestReady = false
+  const bubbles = createRecoveryBubbles(platforms.overlaps, Math.random, (kind, slot) => {
+    if (kind) dailyOrbs.collect(kind)
+    if (kind === 'rainbow') {
+      rainbowRestReady = true
+      return false
+    }
+    if (display.orbKinds.length >= ORB_REWARD.every) return false
+    display.orbKinds.push(kind)
+    if (isBonusOrb(kind)) sendBonusOrbPickup(kind, slot)
+    return display.orbKinds.length < ORB_REWARD.every
+  })
   createArenaEnclosure()
   const scenePlayers = new ScenePlayers()
-  const orbCinematic = createOrbCinematic(active => { display.rewardTransition = active })
-  let orbCycleStart = 0
-  let rewardReturnUntil = 0, expectedRewardTeleportUntil = 0
+  const orbCinematic = createOrbCinematic(
+    active => { display.rewardTransition = active; if (!active) display.rewardBonus = 0 },
+    () => { display.rewardFlashHold = true; display.rewardCelebration++ }
+  )
+  const playTeleportFlash = createContactSound('assets/sounds/orb-teleport-flash.wav', .68)
+  const playRainbowReward = createContactSound('assets/sounds/rainbow-orb-reward.wav', .85)
+  let expectedRewardTeleportUntil = 0
   let expectedRewardPosition: { x: number; y: number; z: number } | undefined
   let rewardTeleportId = 0
-  let pendingReward: { id: number; until: number; confirmed: boolean } | undefined
+  let pendingReward: { id: number; until: number; confirmed: boolean; kind: OrbRewardKind; bonus: number; destination: ReturnType<typeof randomOrbRewardDestination> } | undefined
   function cancelOrbReward() {
     pendingReward = undefined
     expectedRewardPosition = undefined
-    expectedRewardTeleportUntil = rewardReturnUntil = 0
+    expectedRewardTeleportUntil = 0
     orbCinematic.stop()
     display.rewardTransition = false
+    display.rewardBonus = 0
   }
-  function teleportForOrbReward() {
+  function teleportForOrbReward(kind: OrbRewardKind) {
     if (pendingReward || orbCinematic.active) return
-    const destination = { x: ARENA.center.x, y: ORB_REWARD.height, z: ARENA.center.z }
+    const destination = randomOrbRewardDestination(Math.random, kind)
     const id = ++rewardTeleportId
-    pendingReward = { id, until: Date.now()+3000, confirmed: false }
+    display.rewardOrbKinds = kind === 'set' ? display.orbKinds.slice() : []
+    const bonus = kind === 'set' ? display.rewardOrbKinds.reduce((total, orb) => total + orbSetPieceSeconds(orb), 0) : orbRewardBonus(kind)
+    pendingReward = { id, until: Date.now()+3000, confirmed: false, kind, bonus, destination }
     expectedRewardPosition = destination
     expectedRewardTeleportUntil = pendingReward.until
-    rewardReturnUntil = Date.now() + ORB_REWARD.returnGraceSeconds * 1000
     display.rewardTransition = true
+    display.rewardFlashHold = false
+    display.rewardCelebration++
+    display.rewardKind = kind
+    if (kind === 'rainbow') playRainbowReward()
+    else playTeleportFlash()
     void RestrictedActions.movePlayerTo({ newRelativePosition: destination,
       avatarTarget: { x: destination.x, y: destination.y, z: destination.z+10 } }).then(result => {
       if (pendingReward?.id !== id) return
       if (orbTeleportResponseAccepted(result)) pendingReward.confirmed = true
-      else { cancelOrbReward(); console.error('The five-sphere teleport could not be completed.') }
+      else { cancelOrbReward(); console.error('The orb reward teleport could not be completed.') }
     }).catch(() => {
       if (pendingReward?.id === id) cancelOrbReward()
-      console.error('The five-sphere teleport could not be completed.')
+      console.error('The orb reward teleport could not be completed.')
     })
   }
   let run = new Airtime()
@@ -316,20 +351,17 @@ export async function main() {
       const realm = RealmInfo.getOrNull(engine.RootEntity)
       if (realm?.isConnectedSceneRoom === true) wasConnected = true
       const connected = !!position && !(wasConnected && realm?.isConnectedSceneRoom === false)
-      const inside = !!position && (rewardTeleportTransition || insideArena(position,
-        now <= rewardReturnUntil ? ORB_REWARD.returnHeight : undefined))
-      const pointer = PointerLock.getOrNull(engine.CameraEntity)
-      const focused = !!pendingReward || orbCinematic.active || /mobile|android|ios|iphone|ipad/i.test(platform) || !pointer || pointer.isPointerLocked
+      const inside = !!position && (rewardTeleportTransition || insideFlightColumn(position))
       const priorPhase=run.phase
       const completed=run.update({ dt: sampleDt, wallDt, now, inside, connected, floor: floorContact.consume(), supported,
         airborne: clearForTakeoff(position, supported), moved: false,
-        teleported: !rewardTeleportTransition && distance > (rockGrace ? 20 : 4), focused })
+        teleported: !rewardTeleportTransition && isFlightDiscontinuity(lastPosition, position, sampleDt, rockGrace ? 20 : 4) })
       if((priorPhase==='ready'||priorPhase==='finished')&&run.phase==='airborne'){
         lastTakeoffAt=now
         attemptBestMs=display.bestLoaded?(Number(display.best)||0)*1000:undefined
-        orbCycleStart=bubbles.getPoppedTotal()
         bubbles.resetAccumulation()
         display.orbs=0
+        display.orbKinds.length=0
       }else if(run.phase==='airborne'&&attemptBestMs===undefined&&display.bestLoaded){
         attemptBestMs=(Number(display.best)||0)*1000
       }
@@ -357,31 +389,40 @@ export async function main() {
     // A finished/paused attempt must not disable the basic bubble recovery mechanic.
     const connectedForBubbles = !(wasConnected && RealmInfo.getOrNull(engine.RootEntity)?.isConnectedSceneRoom === false)
     if (pendingReward) {
-      const arrival = orbRewardArrivalStatus(position,pendingReward.confirmed,now,pendingReward.until)
+      const arrival = orbRewardArrivalStatus(position,pendingReward.confirmed,now,pendingReward.until,pendingReward.destination)
       if (!connectedForBubbles || arrival==='expired') cancelOrbReward()
       else if (arrival==='arrived' && position) {
+        const bonus = pendingReward.bonus
         pendingReward=undefined
-        if (orbCinematic.start(position)) bubbles.explodeAccumulation(position)
-        else cancelOrbReward()
+        if (orbCinematic.start(position)) {
+          display.rewardBonus = run.addBonus(bonus) ? bonus : 0
+          bubbles.explodeAccumulation(position)
+        } else cancelOrbReward()
       }
     }
     orbCinematic.update(dt, position, connectedForBubbles)
+    display.rewardSeconds = orbCinematic.remainingSeconds
+    dailyOrbs.update(now, localUser)
     const bubbleImpulse = bubbles.update(dt, position, velocityY, liftScale === AIRFLOW.mobileLift,
       !!position && connectedForBubbles && !pendingReward && !orbCinematic.active && insideArena(position), sharedPlayers)
-    const popped = bubbles.getPoppedTotal()
-    if (orbsSinceReset(popped,orbCycleStart) >= ORB_REWARD.every) {
-      orbCycleStart = popped
-      bubbles.resetAccumulation()
-      if (position && insideArena(position)) teleportForOrbReward()
+    display.dailyOrbs = dailyOrbs.progress
+    const rewardKind = orbRewardForPickups(display.orbKinds.length, rainbowRestReady)
+    rainbowRestReady = false
+    if (rewardKind && !pendingReward && !orbCinematic.active) {
+      bubbles.resetAccumulation(true)
+      if (position && insideArena(position)) {
+        teleportForOrbReward(rewardKind)
+        if (rewardKind === 'set') display.orbKinds.length = 0
+      }
     } else if (bubbleImpulse > 0) {
       Physics.applyImpulseToPlayer(Vector3.create(0, bubbleImpulse, 0))
     }
-    display.orbs = orbsSinceReset(popped,orbCycleStart)
+    display.orbs = display.orbKinds.length
     display.energy = Math.round(Math.max(0, Math.min(1, groundAltitude / ARENA.height)) * 100)
     display.altitudeMeters = Number.isFinite(groundAltitude) ? Math.max(0, groundAltitude) : 0
     display.altitude = display.altitudeMeters.toFixed(1)
     scenePlayers.update(dt)
-    const inputFocused = !!pendingReward || orbCinematic.active || /mobile|android|ios|iphone|ipad/i.test(platform) || PointerLock.getOrNull(engine.CameraEntity)?.isPointerLocked !== false
+    const inputFocused = !!pendingReward || orbCinematic.active || orbCinematic.restoringCamera || /mobile|android|ios|iphone|ipad/i.test(platform) || PointerLock.getOrNull(engine.CameraEntity)?.isPointerLocked !== false
     sendFlightInput(dt, supported, rockTouch, inputFocused, getPlayer()?.name || 'Runner')
     // Reassert steady wind occasionally. Multiplayer CRDT traffic can briefly remove the
     // local player's combined-force component while the player remains inside one zone.
@@ -398,7 +439,15 @@ export async function main() {
       else Physics.removeForceFromPlayer(item.source)
     }
 
-    const force = position && !orbCinematic.active && !onPlatform ? rotationForce(position) : undefined
+    reversal = vortexReversalAt(now)
+    for (const wind of windLayers) {
+      const speed = wind.baseSpeed * reversal.spin
+      if (speed === wind.speed || (Math.abs(reversal.spin) < 1 && Math.abs(speed - wind.speed) < .025 &&
+        Math.sign(speed) === Math.sign(wind.speed))) continue
+      wind.speed = speed
+      Animator.getMutable(wind.entity).states[0].speed = speed
+    }
+    const force = position && !orbCinematic.active && !onPlatform ? rotationForce(position, reversal.spin) : undefined
     if (force) Physics.applyForceToPlayer(swirlSource, Vector3.create(force.x, 0, force.z))
     else Physics.removeForceFromPlayer(swirlSource)
 

@@ -1,4 +1,5 @@
-import { ORB_REWARD } from './orb-reward'
+import { DAILY_GOALS, DAILY_ORBS, DailyOrbProgress, RareOrb, orbSetPieceSeconds } from './daily-orbs'
+import { ORB_REWARD, OrbRewardKind } from './orb-reward'
 import { FlightPopup } from './flight-feedback'
 export type { FlightPopup } from './flight-feedback'
 import ReactEcs, { ReactEcsRenderer, UiEntity, UiTransformProps } from '@dcl/sdk/react-ecs'
@@ -10,11 +11,16 @@ import { flightRankTier } from './flight-ranks'
 export type LeaderRow = { rank: number; userId: string; name: string; airtime: string; phase: string; approximate?: boolean }
 export const display = {
   time: '0.000', best: '0.000', bestLoaded: false, state: 'Jump into the wind',
-  orbs: 0, flightStarted: 0, result: undefined as FlightPopup | undefined, resultEvent: undefined as FlightPopup | undefined, persistentBoard: false,
+  dailyOrbs: undefined as DailyOrbProgress | undefined,
+  orbs: 0, orbKinds: [] as (RareOrb | undefined)[], flightStarted: 0, result: undefined as FlightPopup | undefined, resultEvent: undefined as FlightPopup | undefined, persistentBoard: false,
   rows: [] as LeaderRow[], storage: 'Session records only',
   energy: 0, altitude: '0.0', altitudeMeters: 0,
-  touchControls: false, localUser: '', rewardCelebration: 0, rewardTransition: false
+  touchControls: false, localUser: '', rewardCelebration: 0, rewardFlashHold: false, rewardBonus: 0, rewardOrbKinds: [] as (RareOrb | undefined)[], rewardKind: 'set' as OrbRewardKind, rewardTransition: false, rewardSeconds: undefined as number | undefined
 }
+const REWARD_FLASH_DURATION = .48
+// Native Explorer blends back to the gameplay camera in 0.35 seconds.
+const RETURN_FLASH_HOLD = .55
+const RETURN_FLASH_FADE = .24
 export const POPUP_DURATION = 2
 export function popupOpacity(age: number) {
   const progress = Math.max(0, Math.min(1, age / .2, (POPUP_DURATION - age) / .3))
@@ -54,6 +60,26 @@ function tutorialArt(name: string, bounds: UiTransformProps) {
   return <UiEntity uiTransform={bounds} uiBackground={{ texture: {
     src: 'assets/ui/tutorial/' + name + '.png', filterMode: 'bi-linear', wrapMode: 'clamp'
   }, textureMode: 'stretch', ...(bounds.opacity === undefined ? {} : { color: Color4.create(1, 1, 1, Number(bounds.opacity)) }) }} />
+}
+function dailyOrbBoard(x: number, y: number, width: number) {
+  const progress = display.dailyOrbs
+  const complete = !!progress && DAILY_ORBS.every(kind => progress.pickups[kind].length >= DAILY_GOALS[kind])
+  const height = 52, cell = (width - 16) / DAILY_ORBS.length
+  const colors = [cyan, Color4.create(.86, .64, 1, 1), gold]
+  return <UiEntity key="hud-daily-orbs" uiTransform={box(x, y, width, height)}>
+    {tutorialArt('hud-orbs', { ...box(0, 0, width, height), opacity: .88 })}
+    <UiEntity uiTransform={box(8, 5, width - 16, 16)}
+      uiText={label(complete ? 'DAILY ORBS COMPLETE' : 'DAILY ORBS', 11, complete ? cyan : gold)} />
+    {DAILY_ORBS.map((kind, i) => {
+      const count = progress?.pickups[kind].length
+      const done = count === DAILY_GOALS[kind], left = 8 + i * cell
+      return <UiEntity key={'daily-' + kind} uiTransform={box(left, 22, cell, 24)}>
+        {art('orb-' + kind, box(0, 1, 21, 21), done ? 1 : .88)}
+        <UiEntity uiTransform={box(20, 0, cell - 20, 24)}
+          uiText={label(`${count ?? '–'}/${DAILY_GOALS[kind]}`, 11, done ? white : colors[i])} />
+      </UiEntity>
+    })}
+  </UiEntity>
 }
 function heading(name: 'altitude' | 'airtime' | 'nearby' | 'orbs', x: number, y: number, maxWidth: number, height: number) {
   const ratio = name === 'altitude' ? 920 / 180 : name === 'airtime' ? 800 / 180 : name === 'orbs' ? 2200 / 180 : 516 / 112
@@ -152,6 +178,14 @@ function numbers(value: string, height: number, maxWidth: number, align: 'middle
       textureMode: 'stretch', uvs: glyphUv(char) }} />)}
   </UiEntity>
 }
+function flashVortex(width: number, height: number, age: number, strength: number) {
+  const size = Math.min(width, height) * (.66 + .18 * Math.min(1, age / .55))
+  const tile = Math.floor(age * 50) % 36
+  return <UiEntity key="orb-flash-vortex" uiTransform={box((width - size) / 2, (height - size) / 2, size, size)}
+    uiBackground={{ texture: { src: ROOT + 'flash-vortex.png', filterMode: 'bi-linear', wrapMode: 'clamp' },
+      textureMode: 'stretch', uvs: uv(tile, 6, 6), color: Color4.create(1, 1, 1, .86 * strength) }} />
+}
+
 function altitudeGauge(value: number, width: number, height: number) {
   const fill = Number.isFinite(value) ? Math.max(0, Math.min(100, value)) / 100 : 0
   return <UiEntity key="altitude-bar" uiTransform={box(0, 0, width, height)}>
@@ -212,26 +246,40 @@ export function rankAchievementOverlay(W:number,H:number,tier:number,age:number)
 export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier: number) => void; onNewRecord?: () => void } = {}) {
   const tutorial = createFlightTutorial(options.onUiClick)
   let clock = 0, nextTick = 0, tick = 0
+  let rewardCelebration = display.rewardCelebration, flashStart = -10, holdFlash = false
   let resultId = 0, resultStart = -10,shownResult:FlightPopup|undefined
   let recordSoundPlayed = false
   let rankSeen=0,pendingRank=-1,rankTier=-1,rankAge=0,previousSeconds=0
   let flightStarted=display.flightStarted,resetStart=-10,resetFrom=display.time,lastTime=display.time
   let cached: ReactEcs.JSX.Element | undefined, cachedTick = -1
+  function observeFlash() {
+    if (rewardCelebration === display.rewardCelebration) return
+    rewardCelebration = display.rewardCelebration
+    flashStart = clock
+    holdFlash = display.rewardFlashHold
+    tick++
+  }
+  const flashLength = () => holdFlash ? RETURN_FLASH_HOLD + RETURN_FLASH_FADE : REWARD_FLASH_DURATION
   engine.addSystem(dt => {
     if (!Number.isFinite(dt) || dt <= 0) return
-    if (dt > .5) { rankTier=-1; tick++; return }
+    if (dt > .5) {
+      rankTier=-1; flashStart=-10; rewardCelebration=display.rewardCelebration; tick++; return
+    }
     tutorial.update(dt)
     clock += dt
+    observeFlash()
     if(display.flightStarted!==flightStarted){
       flightStarted=display.flightStarted;resetStart=clock;resetFrom=lastTime
       rankSeen=0;pendingRank=-1;rankTier=-1
     }
     lastTime=display.time
+    // Give the guide the screen; preserve any unread result time for when it closes.
+    if (tutorial.isOpen && shownResult && clock - dt - resultStart < POPUP_DURATION) resultStart += dt
     const event=display.resultEvent||display.result
     if(event){
       const id=event.presentationId??event.id
       if(id!==resultId){resultId=id;resultStart=clock;recordSoundPlayed=false}
-      if(event.valid && event.record && !recordSoundPlayed){
+      if(!tutorial.isOpen && event.valid && event.record && !recordSoundPlayed){
         recordSoundPlayed=true
         options.onNewRecord?.()
       }
@@ -248,10 +296,10 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
       rankSeen=tier;pendingRank=tier
     }
     if(rankTier>=0){rankAge+=dt;if(rankAge>=POPUP_DURATION)rankTier=-1}
-    if(!resultActive && !display.rewardTransition && rankTier<0 && pendingRank>=0){
+    if(!resultActive && !tutorial.isOpen && !display.rewardTransition && rankTier<0 && pendingRank>=0){
       rankTier=pendingRank;pendingRank=-1;rankAge=0;options.onRank?.(rankTier)
     }
-    if (clock < nextTick) return
+    if (clock < nextTick && clock - flashStart >= flashLength()) return
     nextTick = clock + .05; tick++
 
   })
@@ -259,6 +307,7 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
   // and applies the device insets itself. Disable SDK virtual scaling and its
   // automatic safe-area wrapper to prevent the whole interface shifting/scaling twice.
   ReactEcsRenderer.setUiRenderer(() => {
+    observeFlash()
     if (cached && cachedTick === tick) return cached
     cachedTick = tick
     const canvas = UiCanvasInformation.getOrNull(engine.RootEntity)
@@ -266,15 +315,66 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
     const l = inset?.left || 0, t = inset?.top || 0
     const w = W - l - (inset?.right || 0), h = H - t - (inset?.bottom || 0)
     const resultActive=!!shownResult&&clock-resultStart<POPUP_DURATION
-    if (display.rewardTransition) {
-      cached = <UiEntity key="reward-cinematic" uiTransform={{width:'100%',height:'100%',pointerFilter:'none'}} />
+    const flashAge = clock - flashStart
+    const flashStrength = holdFlash
+      ? Math.max(0, Math.min(1, 1 - (flashAge - RETURN_FLASH_HOLD) / RETURN_FLASH_FADE)) ** 1.65
+      : Math.max(0, 1 - flashAge / REWARD_FLASH_DURATION) ** 1.65
+    if (display.rewardTransition || flashStrength > 0) {
+      const seconds = display.rewardTransition && !(holdFlash && flashStrength > 0) ? display.rewardSeconds : undefined
+      const breakdown = display.rewardKind === 'set' && display.rewardBonus > 0 && display.rewardOrbKinds.length > 0
+      const width = Math.min(900, w - 8, h * (breakdown ? 1.45 : 1.85))
+      const headingHeight = width * 248 / 1024
+      const beat = Math.max(1, Math.ceil(seconds ?? 0))
+      const finalBeats = seconds !== undefined && beat <= 4
+      const baseDigitHeight = Math.min(132, h * (breakdown ? .19 : .25))
+      const pulse = finalBeats ? 1 + .28 * Math.exp(-7 * (beat - seconds!)) : 1
+      const digitHeight = baseDigitHeight * pulse
+      const bonusWidth = display.rewardBonus ? Math.min(width * .84, h * .98, 650) : 0
+      const bonusHeight = bonusWidth * 140 / 900
+      const breakdownY = headingHeight + baseDigitHeight * 1.28
+      const mathIcon = Math.min(58, h * .15, width / 8)
+      const mathHeight = breakdown ? mathIcon + 8 : 0
+      const bonusY = breakdownY + mathHeight
+      const messageHeight = bonusY + bonusHeight
+      const mathGap = mathIcon * .42
+      const mathLeft = (width - (mathIcon + mathGap) * display.rewardOrbKinds.length + mathGap) / 2
+      cached = <UiEntity key="reward-cinematic" uiTransform={{width:'100%',height:'100%',pointerFilter:'none'}}>
+        {seconds !== undefined && <UiEntity key="rest-message" uiTransform={
+          box(l + (w - width) / 2, t + (h - messageHeight) / 2, width, messageHeight)
+        }>
+          {tutorialArt(display.rewardKind === 'rainbow' ? 'heading-rest-rainbow' : 'heading-rest-cinematic', box(0, 0, width, headingHeight))}
+          <UiEntity key="rest-countdown" uiTransform={box(0, headingHeight, width, digitHeight)}>
+            {numbers(String(beat), digitHeight, width, 'middle-center', finalBeats ? 'gold' : 'blue')}
+          </UiEntity>
+          {breakdown && <UiEntity key="rest-bonus-math" uiTransform={box(0, breakdownY, width, mathHeight)}>
+            {display.rewardOrbKinds.map((kind, i) => {
+              const x = mathLeft + i * (mathIcon + mathGap)
+              return <UiEntity key={'rest-orb-' + i} uiTransform={box(x, 0, mathIcon, mathIcon)}>
+                {art(kind ? 'orb-' + kind : 'vortex', box(0, 0, mathIcon, mathIcon))}
+                <UiEntity uiTransform={box(0, 0, mathIcon, mathIcon)}
+                  uiText={label(`${orbSetPieceSeconds(kind)}s`, Math.min(19, mathIcon * .38), Color4.create(1, 1, 1, 1))} />
+                {i < display.rewardOrbKinds.length - 1 && <UiEntity key={'rest-plus-' + i}
+                  uiTransform={box(mathIcon, 0, mathGap, mathIcon)} uiText={label('+', Math.min(24, mathIcon * .46), gold)} />}
+              </UiEntity>
+            })}
+          </UiEntity>}
+          {bonusWidth > 0 && <UiEntity key="rest-airtime-bonus" uiTransform={box((width - bonusWidth) / 2, bonusY, bonusWidth, bonusHeight)}>
+            {display.rewardKind === 'rainbow'
+              ? tutorialArt('heading-rest-bonus-rainbow', box(0, 0, bonusWidth, bonusHeight))
+              : <UiEntity uiTransform={box(0, 0, bonusWidth, bonusHeight)}
+                uiText={label(`= ${display.rewardBonus}s BONUS`, Math.min(46, bonusHeight * .72), gold)} />}
+          </UiEntity>}
+        </UiEntity>}
+        {flashStrength > 0 && <UiEntity key="orb-reward-flash" uiTransform={box(0, 0, W, H)}
+          uiBackground={{color: Color4.create(1, .91, .69, flashStrength * (holdFlash ? .44 : .36))}}>
+          {flashVortex(W, H, Math.max(0, flashAge), flashStrength)}
+        </UiEntity>}
+      </UiEntity>
       return cached
     }
     if (tutorial.isOpen) {
       cached = <UiEntity uiTransform={{ width: '100%', height: '100%', pointerFilter: 'none' }}>
         {tutorial.render(W, H, inset, display.touchControls)}
-        {resultActive && flightResultOverlay(W,H,shownResult!,clock-resultStart)}
-        {!resultActive && rankTier>=0 && rankAchievementOverlay(W,H,rankTier,rankAge)}
       </UiEntity>
       return cached
     }
@@ -300,6 +400,7 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
     const { orbSize, orbGap, orbGridY } = layout
     const orbGridW = orbColumns * orbSize + (orbColumns - 1) * orbGap
     const mw = layout.altitudeWidth, mh = layout.altitudeHeight, mx = layout.altitudeX, my = layout.altitudeY
+    const dailyWidth = Math.min(186, Math.max(150, w * .49), w - 24)
     const altitudeDigitsH = layout.mobile || h < 500 ? 20 : 26
     const altitudeValue = Number.parseFloat(display.altitude)
     const altitudeText = Math.max(0, Number.isFinite(altitudeValue) ? altitudeValue : 0).toFixed(1)
@@ -353,11 +454,18 @@ export function setupAirtimeUi(options: { onUiClick?: () => void; onRank?: (tier
         {Array.from({ length: ORB_REWARD.every }, (_, i) => {
           const x = (ow - orbGridW) / 2 + (i % orbColumns) * (orbSize + orbGap)
           const y = orbGridY + Math.floor(i / orbColumns) * (orbSize + orbGap)
+          const kind = i < orbCount ? display.orbKinds[i] : undefined
+          const bonus = i < orbCount ? orbSetPieceSeconds(kind) : 0
           return <UiEntity key={'orb-tick-' + i} uiTransform={box(x, y, orbSize, orbSize)}>
-            {i < orbCount ? art('vortex', box(0, 0, orbSize, orbSize)) : tutorialArt('orb-slot-empty', box(0, 0, orbSize, orbSize))}
+            {i < orbCount ? art(kind ? 'orb-' + kind : 'vortex', box(0, 0, orbSize, orbSize)) :
+              tutorialArt('orb-slot-empty', box(0, 0, orbSize, orbSize))}
+            {bonus > 0 && <UiEntity key={'orb-bonus-' + i} uiTransform={box(0, 0, orbSize, orbSize)}
+              uiText={label(`+${bonus}s`, layout.mobile ? 14 : 11, Color4.create(1, 1, 1, 1))} />}
           </UiEntity>
         })}
       </UiEntity>
+      {dailyOrbBoard(l + (w - dailyWidth) / 2,
+        layout.mobile ? t + h - (portrait ? 116 : 72) : orbY + oh + 7, dailyWidth)}
       <UiEntity key="hud-sidebar" uiTransform={box(px, py, pw, panelH)}>
         {tutorialArt('hud-panel', {...box(0, 0, pw, panelH), opacity: .8})}
         {!layout.mobile && airtimeCard}

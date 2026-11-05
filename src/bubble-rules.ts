@@ -3,7 +3,7 @@ import { ARENA, BUILD_SCALE, Point } from './arena'
 
 export const BUBBLES = {
   count: 24, radius: 0.48 * BUILD_SCALE, orbOpacity: 0.72, contactRadius: 1.6 * BUILD_SCALE, capsuleHalfHeight: 0.5, maxSweep: 4, spawnClearance: 1.8 * BUILD_SCALE,
-  vortexScale: 1.6, vortexEmission: 3.2, glowBaseIntensity: 2.6, glowScanIntensity: 1.8,
+  vortexScale: 1.6, glowBaseIntensity: 2.6, glowScanIntensity: 1.8,
   orbitDegrees: 10, spinDegrees: 110, vortexSpinDegrees: 64, respawn: 5, popDuration: 0.28,
   glowUpdateInterval: 1 / 12, particleCount: 192, particlesPerPop: 64, particleLifetime: 3.2,
   accumulationEvery: ORB_REWARD.every, accumulationPerPop: 12, accumulationCapacity: 60,
@@ -17,6 +17,20 @@ export const BUBBLES = {
   desktopImpulse: 1.2, mobileImpulse: 0.7, maxUp: 3, cooldown: 0.8,
   sound: 'assets/sounds/goldenorbspickup.mp3', volume: 0.5, soundInterval: 0.12
 } as const
+
+// Stable orb lanes are also used to validate pickup reports against live player positions.
+const orbSlots = [3.5, 7, 10.5, 15].flatMap((y, layer) => Array.from({ length: 12 }, (_, index) => ({
+  y: y * BUILD_SCALE, radius: [9, 13, 17][(index + layer) % 3] * BUILD_SCALE, angle: index * Math.PI / 6 + layer * .3
+})))
+
+export function bubbleSlot(index: number) { return orbSlots[(index * 5) % orbSlots.length] }
+
+export function nearBubbleLane(point: Point, index: number): boolean {
+  if (!Number.isInteger(index) || index < 0 || index >= BUBBLES.count) return false
+  const lane = bubbleSlot(index)
+  return Math.abs(point.y - lane.y) <= BUBBLES.contactRadius + 3 &&
+    Math.abs(Math.hypot(point.x - ARENA.center.x, point.z - ARENA.center.z) - lane.radius) <= BUBBLES.contactRadius + 2
+}
 
 // Golden motes spiral inward, then keep orbiting the vortex axis until the reward.
 export function goldenVortexOrbitPoint(origin: Point, angle: number, radius: number, height: number,
