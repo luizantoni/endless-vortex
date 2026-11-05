@@ -42,3 +42,26 @@ assets/ui/tutorial/*.svg
 assets/ui/ranks/*.svg
 
 assets/models/orchard-source.glb
+
+# Source artwork, duplicate thumbnails, and retired game UI are not runtime content.
+/*.png
+assets/images/*
+!assets/images/endlessvortexthumb.png
+assets/models/leaf1-source.glb
+assets/scene/Models
+assets/ui/eternal-vortex-hud.png
+assets/ui/modular/milestones
+assets/ui/modular/panel.png
+assets/ui/modular/row.png
+assets/ui/modular/burst.png
+assets/ui/modular/dial.png
+assets/ui/modular/digits.png
+assets/ui/modular/segment.png
+assets/ui/modular/streak.png
+assets/ui/tutorial/medal-*.png
+assets/ui/tutorial/medals-v2
+assets/ui/tutorial/result-vignette-red.png
+assets/ui/tutorial/reward-vignette-gold.png
+assets/sounds/achievement-medal.mp3
+# The full orchard remains editable locally; the scene loads the optimized copy.
+assets/models/orchard.glb

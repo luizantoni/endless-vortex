@@ -109,3 +109,9 @@ The sphere reward provides a roughly 9–10 second rest ascent toward the vortex
 Rare spheres appear among normal recovery spheres: blue (15% per spawn), purple (5%), and rainbow (1%). Rare drops are personal, so another player collecting a gold sphere cannot remove your rare drop. All colors count toward the five-sphere teleport. The personal Daily Orbs board tracks 5 blue, 3 purple, and 1 rainbow; progress saves by wallet and resets at midnight UTC. The teleport starts slightly off center, inside the visible blue updraft.
 
 The in-world Vortex Leaderboard stands near the north edge of the arena, facing the vortex. It shows the ten best completed flights from the scene's saved records and updates after the server confirms a save.
+
+### Publication size
+
+Run `npm run build:publish` before publishing. It creates a production bundle and checks the exact files selected by the installed Decentraland SDK against a **49,000,000-byte** limit. `npm run size:check` checks the current bundle; a development build includes debug code and can be larger.
+
+The scene loads `assets/models/orchard-runtime.glb`. The full-quality `orchard.glb` and `orchard-source.glb` remain local editing sources and are excluded from publishing, along with unused artwork and retired UI. After changing the orchard, run `npm run scene:fit`, then `npm run scene:optimize` to regenerate the runtime copy. The optimizer is pinned to gltfpack 1.3.0; it preserves named nodes/materials and all animation channels, bounds simplification error, and uses ordinary floating-point glTF without extra compression extensions.

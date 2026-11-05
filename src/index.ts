@@ -57,12 +57,12 @@ export async function main() {
     hideJoystick: false, hideCrosshair: false
   })
 
-  const source = 'assets/models/orchard.glb'
+  const source = 'assets/models/orchard-runtime.glb'
   const previousSource = 'assets/models/endless-vortex-plants.glb'
   const windSource = 'assets/models/endless-vortex-wind.glb'
   const models = [...engine.getEntitiesWith(GltfContainer)]
   const environment = models.find(([, model]) => model.src === source)?.[0] ??
-    models.find(([, model]) => model.src === previousSource)?.[0] ??
+    models.find(([, model]) => model.src === 'assets/models/orchard.glb' || model.src === previousSource)?.[0] ??
     engine.addEntity()
   // Keep the modeled orchard, including its animated foliage, centered on the land.
   if (!Transform.has(environment)) Transform.create(environment, { position: { ...ARENA.center },
@@ -74,7 +74,7 @@ export async function main() {
     authoredTransform.scale = Vector3.create(ORCHARD_SCALE, ORCHARD_SCALE, ORCHARD_SCALE)
   }
   for (const [entity, model] of models) {
-    if (entity !== environment && (model.src === source || model.src === previousSource || model.src === 'assets/models/rocks.glb' ||
+    if (entity !== environment && (model.src === source || model.src === 'assets/models/orchard.glb' || model.src === previousSource || model.src === 'assets/models/rocks.glb' ||
         model.src === 'assets/models/rocks2.glb' ||
         model.src === 'assets/models/endless_vortex6/endless_vortex6.glb' ||
         model.src === 'assets/scene/Models/wind_tunnel2/wind_tunnel2.glb')) {

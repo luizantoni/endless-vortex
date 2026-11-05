@@ -145,7 +145,7 @@ test('installed SDK: visible central updraft, retained gliding, matching platfor
   assert.equal(GltfContainer.get(authoredEnvironment).visibleMeshesCollisionMask,
     ecs.ColliderLayer.CL_NONE,'modeled orchard trees and animated foliage have no collision')
   assert.equal(GltfContainer.get(authoredEnvironment).invisibleMeshesCollisionMask, 0)
-  assert.equal(GltfContainer.get(authoredEnvironment).src, 'assets/models/orchard.glb')
+  assert.equal(GltfContainer.get(authoredEnvironment).src, 'assets/models/orchard-runtime.glb')
   assert.equal(ecs.Animator.get(authoredEnvironment).states[0].playing, true)
   assert.deepEqual(Transform.get(authoredEnvironment).position, ARENA.center)
   const orchardScale = ARENA.size / 44 * 1.2

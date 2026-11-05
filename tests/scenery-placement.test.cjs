@@ -23,3 +23,27 @@ test('arena scenery is centered, grounded, and contained by the land with origin
  assert.equal(trees,4,'all four original trees remain as corner scenery')
  assert.equal(j.animations[0].channels.length,258,'authored foliage animation is preserved')
 })
+
+test('optimized runtime orchard preserves scenery, materials, and animated foliage',()=>{
+ const read=file=>{
+  const b=fs.readFileSync(file)
+  assert.equal(b.readUInt32LE(8),b.length)
+  return JSON.parse(b.toString('utf8',20,20+b.readUInt32LE(12)))
+ }
+ const source=read('assets/models/orchard.glb'),runtime=read('assets/models/orchard-runtime.glb')
+ assert.deepEqual(runtime.nodes.map(n=>n.name).sort(),source.nodes.map(n=>n.name).sort())
+ assert.deepEqual(runtime.materials.map(m=>m.name),source.materials.map(m=>m.name))
+ assert.equal(runtime.animations[0].name,'Animation')
+ assert.equal(runtime.animations[0].channels.length,source.animations[0].channels.length)
+ assert.deepEqual(runtime.extensionsRequired||[],[],'no extra model decoder is needed')
+ const worldScale=ARENA.size/44*1.2
+ for(const node of runtime.nodes.filter(n=>n.mesh!==undefined)){
+  const original=source.nodes.find(n=>n.name===node.name)
+  const before=nodeBounds(source,original),after=nodeBounds(runtime,node)
+  for(const side of ['lo','hi'])for(let axis=0;axis<3;axis++){
+   assert.ok(Math.abs(before[side][axis]-after[side][axis])*worldScale<.06,
+     node.name+': optimized silhouette bounds stay within six centimeters')
+  }
+ }
+ assert.ok(fs.statSync('assets/models/orchard-runtime.glb').size<13_000_000)
+})
