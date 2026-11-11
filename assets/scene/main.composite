@@ -645,7 +645,7 @@
               }
             },
             "silenceVoiceChat": false,
-            "disablePortableExperiences": false,
+            "disablePortableExperiences": true,
             "spawnPoints": [
               {
                 "name": "SpawnArea1",

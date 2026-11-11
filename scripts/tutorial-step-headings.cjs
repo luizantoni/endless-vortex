@@ -1,7 +1,7 @@
 // Yellow sans-serif outline images keep lesson names and step digits out of native text rendering.
 const forms=require('./step-letterforms.json')
 module.exports=save=>{
- const names=['THE UPDRAFT','STEER & GLIDE','GOLDEN ORBS','LIVING PLATFORMS','CHASE YOUR BEST']
+ const names=['THE UPDRAFT','GOLDEN ORBS','PLATFORMS','BEAT YOUR BEST']
  const draw=(text,w,h)=>{
   const labelLength=text.startsWith('FLIGHT GUIDE')?12:0
   const size=i=>i<labelLength?.82:1
@@ -18,7 +18,7 @@ module.exports=save=>{
 
  }
  names.forEach((name,i)=>{
-  const count=`0${i+1} OF 05`
+  const count=`${String(i+1).padStart(2,'0')} OF ${String(names.length).padStart(2,'0')}`
   for(const [mode,text,w,h]of[
    ['full',`FLIGHT GUIDE · ${count} · ${name}`,2400,120],
    ['short',`${count} · ${name}`,1500,120],

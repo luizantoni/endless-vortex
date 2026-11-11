@@ -98,7 +98,7 @@
   ],
   "featureToggles": {
     "voiceChat": "enabled",
-    "portableExperiences": "enabled",
+    "portableExperiences": "disabled",
     "nearbyVoiceChat": "enabled"
   },
   "creator": "",

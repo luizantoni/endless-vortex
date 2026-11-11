@@ -54,7 +54,8 @@ test('5x5 scene and Creator Hub parcel/spawn metadata agree', () => {
   const expected = Array.from({ length: 25 }, (_, i) => `${i % 5},${Math.floor(i / 5)}`).sort()
   assert.ok(expected.every(parcel => scene.scene.parcels.includes(parcel)), 'configured land contains the entire playable footprint')
   assert.deepEqual(meta.layout.parcels.map(p => `${p.x},${p.y}`).sort(), [...scene.scene.parcels].sort())
-  assert.equal(meta.disablePortableExperiences, false)
+  assert.equal(meta.disablePortableExperiences, true)
+  assert.equal(scene.featureToggles.portableExperiences, 'disabled')
   const spawnRange=value=>Array.isArray(value)?value:[value,value]
   for (const axis of ['x', 'y', 'z']) assert.deepEqual(spawnRange(meta.spawnPoints[0].position[axis].value),spawnRange(scene.spawnPoints[0].position[axis]))
   assert.deepEqual(scene.spawnPoints[0].position.y, [0, 0])

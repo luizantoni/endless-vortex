@@ -55,7 +55,7 @@ node node_modules/@dcl/sdk-commands/dist/index.js start --skip-build
 
 Or use `npm run build -- --production --skip-install`, then `npm start -- --skip-build`.
 
-**Stop and relaunch an existing preview, and reload the project in Creator Hub** to load the new 36-parcel layout and scaled model. Both `scene.json` and the editor composite now have matching geometry, ground spawn and enabled portable experiences; stale launch-deck metadata was removed. Spawn should be at floor level near the new center.
+**Stop and relaunch an existing preview, and reload the project in Creator Hub** to load the new 36-parcel layout and scaled model. Both `scene.json` and the editor composite now have matching geometry and ground spawn, with portable experiences and Smart Wearables disabled; stale launch-deck metadata was removed. Spawn should be at floor level near the new center.
 
 1. Verify the lift label matches the device. Jump into the central air tunnel at x/z 24, then steer and glide out of its 5.4 m square footprint. Only upward lift should occur inside; outside, there should be no wind rotation, inward pull, outer containment or broad lift. Test both Lift settings. Platforms should continue orbiting.
 2. Fly above the floor: airtime increases. Land on an orbiting emerald leaf: time pauses. Test riding it, walking toward its edge, and jumping off at different points in its orbit. Counting should resume on departure; wind resumes only on re-entering the central volume. Check for slipping, jitter, clipping and takeoff failures in each native client.
